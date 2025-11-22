@@ -1,0 +1,905 @@
+// Main Application Class with Comprehensive Debugging
+class App {
+    constructor() {
+        
+        this.currentCommander = null;
+        this.cardData = null;
+        this.fontSize = 'md';
+        this.displayEngine = null;
+        
+        this.initializeElements();
+        this.initializeEventListeners();
+        this.initializeModules();
+    }
+
+    initializeElements() {
+        this.cardSearch = document.getElementById('cardSearch');
+        this.searchResults = document.getElementById('searchResults');
+        this.generateBtn = document.getElementById('generateBtn');
+        this.cardGrid = document.getElementById('cardGrid');
+        this.loadingSpinner = document.getElementById('loadingSpinner');
+        this.errorMessage = document.getElementById('errorMessage');
+        this.statusMessage = document.getElementById('statusMessage');
+        
+        this.loadBtn = document.getElementById('loadBtn');
+        this.downloadTextBtn = document.getElementById('downloadTextBtn');
+        this.generatePdfBtn = document.getElementById('generatePdfBtn');
+        this.printBtn = document.getElementById('printBtn');
+        this.sizeDown = document.getElementById('sizeDown');
+        this.sizeUp = document.getElementById('sizeUp');
+        this.sizeDisplay = document.getElementById('sizeDisplay');
+        this.fileInput = document.getElementById('fileInput');
+        this.pdfCutoff = document.getElementById('pdfCutoff');
+    }
+
+    initializeEventListeners() {
+        try {
+            if (this.cardSearch) {
+                this.cardSearch.addEventListener('input', (e) => {
+                    this.handleSearchInput(e);
+                });
+				
+				this.setupSearchDropdown();
+            }
+
+            if (this.generateBtn) {
+                this.generateBtn.addEventListener('click', () => {
+                    this.generateList();
+                });
+            }
+
+            if (this.loadBtn) {
+                this.loadBtn.addEventListener('click', () => {
+                    this.loadList();
+                });
+            }
+
+            if (this.downloadTextBtn) {
+                this.downloadTextBtn.addEventListener('click', () => {
+                    this.downloadText();
+                });
+            }
+
+            if (this.generatePdfBtn) {
+                this.generatePdfBtn.addEventListener('click', () => {
+                    this.generatePdf();
+                });
+            }
+
+            if (this.printBtn) {
+                this.printBtn.addEventListener('click', () => {
+                    this.printList();
+                });
+            }
+
+            if (this.sizeDown) {
+                this.sizeDown.addEventListener('click', () => {
+                    this.decreaseFontSize();
+                });
+            }
+
+            if (this.sizeUp) {
+                this.sizeUp.addEventListener('click', () => {
+                    this.increaseFontSize();
+                });
+            }
+			
+			// ADD THIS EVENT LISTENER for PDF cutoff filter:
+			if (this.pdfCutoff) {
+				this.pdfCutoff.addEventListener('change', (e) => {
+					const value = parseInt(e.target.value);
+					if (value < 0) e.target.value = 0;
+					if (value > 100) e.target.value = 100;
+				});
+			}
+
+            if (this.fileInput) {
+                this.fileInput.addEventListener('change', (e) => {
+                    this.handleFileSelect(e);
+                });
+            }
+
+        } catch (error) {
+            if (this.debug && this.debug.error) {
+                this.debug.error('Error initializing event listeners', error);
+            }
+        }
+    }
+
+	initializeModules() {
+		try {
+			if (typeof CardDisplayEngine !== 'undefined') {
+				this.displayEngine = new CardDisplayEngine();
+				
+				// CACHE VERSION CHECK
+				this.checkSymbolCacheVersion();
+			}
+		} catch (error) {
+			// REMOVED debug system reference - just log to console
+			console.error('Error initializing modules', error);
+		}
+	}
+
+	// [REPLACE the current handleSearchInput method in app.js - around line 200]
+	async handleSearchInput(event) {
+		const query = event.target.value.trim();
+
+		// ENHANCED: Handle BOTH commander URLs AND upgrade guide URLs
+		if (query.startsWith('http') || query.includes('edhrec.com')) {
+			this.hideSearchResults();
+			
+			// Check for BOTH URL types
+			const urlCommander = this.extractCommanderFromURL(query);
+			const isUpgradeGuide = this.isUpgradeGuideURL(query);
+			
+			if (urlCommander || isUpgradeGuide) {
+				console.log(`🎯 URL detected, enabling generate button:`, {
+					isCommander: !!urlCommander,
+					isUpgradeGuide: isUpgradeGuide,
+					url: query
+				});
+				
+				if (this.generateBtn) {
+					this.generateBtn.disabled = false;
+				}
+				
+				if (isUpgradeGuide) {
+					this.showStatus(`Ready to generate upgrade guide from URL`);
+				} else {
+					this.showStatus(`Ready to generate list for commander from URL`);
+				}
+			}
+			return;
+		}
+
+		if (query.length < 2) {
+			this.hideSearchResults();
+			return;
+		}
+
+		try {
+			const scryfall = new ScryfallAPI();
+			const results = await scryfall.searchCards(query);
+
+			this.displaySearchResults(results);
+			
+		} catch (error) {
+			this.hideSearchResults();
+		}
+	}
+
+    displaySearchResults(results) {
+        if (!this.searchResults) {
+            return;
+        }
+
+        if (results.length === 0) {
+            this.searchResults.innerHTML = '<div class="search-result">No results found</div>';
+            this.searchResults.classList.add('active');
+            return;
+        }
+
+        this.searchResults.innerHTML = '';
+        results.slice(0, 10).forEach(card => {
+            const resultElement = document.createElement('div');
+            resultElement.className = 'search-result';
+            resultElement.innerHTML = `
+                <div class="card-name">${this.escapeHTML(card.name)}</div>
+                <div class="card-type">${this.escapeHTML(card.type_line)}</div>
+            `;
+            
+            resultElement.addEventListener('click', () => {
+                this.selectCommander(card);
+            });
+            
+            this.searchResults.appendChild(resultElement);
+        });
+
+        this.searchResults.classList.add('active');
+    }
+
+    hideSearchResults() {
+        if (this.searchResults) {
+            this.searchResults.classList.remove('active');
+        }
+    }
+
+    selectCommander(card) {
+        this.currentCommander = card;
+        this.cardSearch.value = card.name;
+        this.hideSearchResults();
+        
+        if (this.generateBtn) {
+            this.generateBtn.disabled = false;
+        }
+        
+        this.showStatus(`Selected: ${card.name}`);
+    }
+
+	async generateList() {
+		let commanderToUse = this.currentCommander;
+		let searchInput = this.cardSearch.value.trim();
+		
+		// Handle upgrade guide URLs first
+		if (this.isUpgradeGuideURL(searchInput)) {
+			await this.handleUpgradeGuide(searchInput);
+			return;
+		}
+				
+		// Handle URL input if no commander selected
+		if (!commanderToUse && searchInput) {
+			const urlCommander = this.extractCommanderFromURL(searchInput);
+			if (urlCommander) {
+				console.log(`🎯 Using commander from URL: ${urlCommander}`);
+				try {
+					const scryfall = new ScryfallAPI();
+					commanderToUse = await scryfall.getCardByName(urlCommander);
+					if (commanderToUse) {
+						this.currentCommander = commanderToUse;
+						this.cardSearch.value = commanderToUse.name; // Update display
+						this.hideSearchResults();
+						this.showStatus(`Selected: ${commanderToUse.name} (from URL)`);
+					}
+				} catch (error) {
+					this.showError(`Failed to find commander from URL: ${error.message}`);
+					return;
+				}
+			}
+		}
+		
+		// VALIDATION 
+		if (!commanderToUse) {
+			this.showError('Please select a commander first or enter a valid EDHREC URL');
+			return;
+		}
+
+		// IMPLEMENTATION
+		this.showLoading();
+		this.hideError();
+		this.hideStatus();
+
+		try {
+			this.cardData = await window.extractEDHRECData(commanderToUse.name);
+
+			if (!this.cardData || Object.keys(this.cardData).length === 0) {
+				throw new Error('No card data found for this commander');
+			}
+			
+			await this.addCommanderCard();
+			
+			await this.displayCards(this.cardData);
+			this.hideLoading();
+			
+			const totalCards = this.countTotalCards();
+			this.showStatus(`Successfully generated list for ${commanderToUse.name} with ${totalCards} cards`);
+			
+		} catch (error) {
+			this.hideLoading();
+			this.showError(`Failed to generate list: ${error.message}`);
+		}
+	}
+	
+	async addCommanderCard() {
+		if (!this.currentCommander) {
+			return;
+		}
+		
+		// Get deck count from EDHREC data or use fallback
+		let deckCount = 'Commander';
+		if (this.cardData && this.cardData._deckCount) {
+			deckCount = this.cardData._deckCount;
+			delete this.cardData._deckCount;
+		}
+		
+		let commanderPrice = 'Price N/A';
+		try {
+			const scryfallAPI = new ScryfallAPI();
+			commanderPrice = await scryfallAPI.getPriceDisplay(this.currentCommander.prices, true);
+		} catch (error) {
+			console.error('Error getting commander price:', error);
+		}
+		
+		const commanderSection = {
+			"Commander": [{
+				name: this.currentCommander.name,
+				inclusion: deckCount, // This will now be "172,434 decks" instead of just "Commander"
+				mana_cost: this.currentCommander.mana_cost,
+				type_line: this.currentCommander.type_line,
+				oracle_text: this.currentCommander.oracle_text,
+				flavor_text: this.currentCommander.flavor_text,
+				power: this.currentCommander.power,
+				toughness: this.currentCommander.toughness,
+				loyalty: this.currentCommander.loyalty,
+				defense: this.currentCommander.defense,
+				price: commanderPrice
+			}]
+		};
+
+		this.cardData = { ...commanderSection, ...this.cardData };
+	}
+		
+    countTotalCards() {
+        if (!this.cardData) return 0;
+        const total = Object.values(this.cardData).reduce((sum, section) => sum + section.length, 0);
+        return total;
+    }
+
+    async displayCards(cardData) {
+        if (!this.cardGrid) {
+            return;
+        }
+
+        this.cardGrid.innerHTML = '';
+        
+        if (!cardData || Object.keys(cardData).length === 0) {
+            this.cardGrid.innerHTML = '<p class="text-center">No card data found</p>';
+            return;
+        }
+
+        try {
+            if (!this.displayEngine) {
+                this.displayEngine = new CardDisplayEngine();
+            }
+			
+			// CRITICAL FIX: AWAIT SYMBOL DATABASE READINESS BEFORE RENDERING
+			await this.displayEngine.ensureSymbolSupport();
+
+            this.updateGridColumns();
+
+            for (const [sectionName, sectionCards] of Object.entries(cardData)) {
+                if (sectionCards.length > 0) {
+                    const sectionHeader = document.createElement('div');
+                    sectionHeader.className = 'section-header';
+                    
+                    if (sectionName === "Commander") {
+                        sectionHeader.textContent = `${sectionName}`;
+                    } else {
+                        sectionHeader.textContent = `${sectionName} (${sectionCards.length} cards)`;
+                    }
+                    
+                    this.cardGrid.appendChild(sectionHeader);
+
+                    const cardFrames = await this.displayEngine.createCardFrames(sectionCards, this.fontSize);
+                    cardFrames.forEach((frame, index) => {
+                        this.cardGrid.appendChild(frame);
+                    });
+                }
+            }
+            
+        } catch (error) {
+            this.cardGrid.innerHTML = '<p class="text-center">Error displaying cards</p>';
+        }
+    }
+
+    updateGridColumns() {
+		if (!this.cardGrid) return;
+		
+		const sizeToColumns = {
+			'xs': 'columns-6',
+			'sm': 'columns-5', 
+			'md': 'columns-4',
+			'lg': 'columns-3',
+			'xl': 'columns-3'
+		};
+		
+		this.cardGrid.className = 'card-grid';
+		this.cardGrid.classList.add(sizeToColumns[this.fontSize]);
+	}
+
+    downloadText() {
+        if (!this.cardData || Object.keys(this.cardData).length === 0) {
+            this.showError('No card data available to download');
+            return;
+        }
+
+        try {
+            const exportManager = new ExportManager();
+            const commanderName = this.currentCommander ? 
+                this.currentCommander.name.replace(/[^a-z0-9]/gi, '_') : 'edhrec';
+            const filename = `${commanderName}_list.txt`;
+            
+            exportManager.downloadTextFile(this.cardData, filename);
+            
+            this.showStatus('Text file downloaded');
+            
+        } catch (error) {
+            this.showError('Failed to download text file: ' + error.message);
+        }
+    }
+
+    async generatePdf() {
+        if (!this.cardData || Object.keys(this.cardData).length === 0) {
+            this.showError('No card data available to generate PDF');
+            return;
+        }
+
+        try {
+            const exportManager = new ExportManager();
+            const commanderName = this.currentCommander ? 
+                this.currentCommander.name.replace(/[^a-z0-9]/gi, '_') : 'edhrec';
+            const filename = `${commanderName}_list.pdf`;
+            
+            await exportManager.generatePdf(this.cardData, filename);
+            
+            this.showStatus('PDF generated and opened in new tab');
+            
+        } catch (error) {
+            this.showError('Failed to generate PDF: ' + error.message);
+        }
+    }
+
+    loadList() {
+        if (!this.fileInput) {
+            this.showError('Load functionality not available');
+            return;
+        }
+
+        try {
+            this.fileInput.click();
+        } catch (error) {
+            this.showError('Cannot open file selector');
+        }
+    }
+
+    printList() {
+        if (!this.cardData || Object.keys(this.cardData).length === 0) {
+            this.showError('No card data available to print');
+            return;
+        }
+
+        try {
+            window.print();
+        } catch (error) {
+            this.showError('Print functionality not available');
+        }
+    }
+
+    decreaseFontSize() {
+        const sizes = ['xs', 'sm', 'md', 'lg', 'xl'];
+        const currentIndex = sizes.indexOf(this.fontSize);
+        if (currentIndex > 0) {
+            this.fontSize = sizes[currentIndex - 1];
+            this.updateFontSizeDisplay();
+            this.displayCards(this.cardData);
+        }
+    }
+
+    increaseFontSize() {
+        const sizes = ['xs', 'sm', 'md', 'lg', 'xl'];
+        const currentIndex = sizes.indexOf(this.fontSize);
+        if (currentIndex < sizes.length - 1) {
+            this.fontSize = sizes[currentIndex + 1];
+            this.updateFontSizeDisplay();
+            this.displayCards(this.cardData);
+        }
+    }
+
+    updateFontSizeDisplay() {
+        if (this.sizeDisplay) {
+            const sizeLabels = {
+                'xs': 'Extra Small',
+                'sm': 'Small', 
+                'md': 'Medium',
+                'lg': 'Large',
+                'xl': 'Extra Large'
+            };
+            this.sizeDisplay.textContent = sizeLabels[this.fontSize];
+        }
+    }
+
+    handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) {
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const content = e.target.result;
+                this.parseUploadedFile(content, file.name);
+                
+            } catch (error) {
+                this.showError('Error processing file: ' + error.message);
+            }
+        };
+
+        reader.onerror = (error) => {
+            this.showError('Cannot read selected file');
+        };
+
+        reader.readAsText(file);
+    }
+
+    parseUploadedFile(content, fileName) {
+        try {
+            const exportManager = new ExportManager();
+            const cardData = exportManager.parseCardList(content);
+            
+            const validation = exportManager.validateCardList(cardData);
+            
+            if (!validation.isValid) {
+                this.showError('Invalid file format: ' + validation.errors.join(', '));
+                return;
+            }
+            
+            if (validation.warnings.length > 0) {
+                this.showStatus(`File loaded with warnings: ${validation.warnings.join(', ')}`);
+            }
+            
+            this.cardData = cardData;
+            this.currentCommander = null;
+            this.displayCards(this.cardData);
+            this.showStatus(`Loaded custom list with ${this.countTotalCards()} cards`);
+            
+        } catch (error) {
+            this.showError('Cannot parse file: ' + error.message);
+        }
+    }
+
+    showLoading() {
+        if (this.loadingSpinner) {
+            this.loadingSpinner.classList.remove('hidden');
+        }
+    }
+
+    hideLoading() {
+        if (this.loadingSpinner) {
+            this.loadingSpinner.classList.add('hidden');
+        }
+    }
+
+    showError(message) {
+        if (this.errorMessage) {
+            this.errorMessage.textContent = message;
+            this.errorMessage.classList.remove('hidden');
+        }
+    }
+
+    hideError() {
+        if (this.errorMessage) {
+            this.errorMessage.classList.add('hidden');
+        }
+    }
+
+    showStatus(message) {
+        if (this.statusMessage) {
+            this.statusMessage.textContent = message;
+            this.statusMessage.classList.remove('hidden');
+        }
+    }
+
+    hideStatus() {
+        if (this.statusMessage) {
+            this.statusMessage.classList.add('hidden');
+        }
+    }
+
+    escapeHTML(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+	
+	extractCommanderFromURL(url) {
+		// Skip if it's an upgrade guide URL
+		if (this.isUpgradeGuideURL(url)) {
+			return null;
+		}
+		
+		try {
+			console.log(`🔗 URL detected: ${url}`);
+			
+			// Parse EDHREC commander URLs
+			const urlObj = new URL(url);
+			const pathParts = urlObj.pathname.split('/');
+			
+			// Extract from patterns like:
+			// /commanders/etali-primal-conqueror
+			// /commanders/clavileno-first-of-the-blessed
+			if (urlObj.hostname.includes('edhrec.com') && pathParts.includes('commanders')) {
+				const commanderSlug = pathParts[pathParts.length - 1];
+				if (commanderSlug && commanderSlug !== 'commanders') {
+					// Convert slug to proper name: "etali-primal-conqueror" → "Etali, Primal Conqueror"
+					const nameParts = commanderSlug.split('-').map(part => 
+						part.charAt(0).toUpperCase() + part.slice(1)
+					);
+					const commanderName = nameParts.join(' ').replace(/ And /g, ' and ');
+					console.log(`✅ Extracted commander: ${commanderName}`);
+					return commanderName;
+				}
+			}
+		} catch (error) {
+			console.log('❌ Not a valid EDHREC URL, using as regular search');
+		}
+		return null;
+	}
+	
+	setupSearchDropdown() {
+		this.handleDocumentClick = (event) => {
+			const searchContainer = document.querySelector('.search-container');
+			const dropdown = this.searchResults;
+			
+			if (searchContainer && dropdown && 
+				!searchContainer.contains(event.target) && 
+				dropdown.classList.contains('active')) {
+				this.hideSearchResults();
+			}
+		};
+
+		this.handleSearchKeydown = (event) => {
+			if (!this.searchResults.classList.contains('active')) return;
+
+			const results = this.searchResults.querySelectorAll('.search-result');
+			if (results.length === 0) return;
+
+			// Handle only arrow keys and Escape here
+			// Enter and Tab are handled by our unified handler below
+			switch(event.key) {
+				case 'ArrowDown':
+					event.preventDefault();
+					this.navigateSearchResults(1);
+					break;
+				case 'ArrowUp':
+					event.preventDefault();
+					this.navigateSearchResults(-1);
+					break;
+				case 'Escape':
+					event.preventDefault();
+					this.hideSearchResults();
+					break;
+				// Explicitly ignore Enter and Tab to avoid conflicts
+				case 'Enter':
+				case 'Tab':
+					// These are handled by the unified handler
+					break;
+			}
+		};
+
+		// Unified key handler for Enter and Tab keys
+		this.unifiedKeyHandler = (event) => {
+			const query = this.cardSearch.value.trim();
+			
+			// Handle Enter key
+			if (event.key === 'Enter') {
+				// Case 1: URL input - generate immediately
+				if (query.startsWith('http') || query.includes('edhrec.com')) {
+					const urlCommander = this.extractCommanderFromURL(query);
+					if (urlCommander) {
+						event.preventDefault();
+						this.generateList();
+						return;
+					}
+				}
+				
+				// Case 2: Card selection from dropdown - select highlighted result
+				if (this.searchResults.classList.contains('active')) {
+					event.preventDefault();
+					this.selectHighlightedResult();
+					return;
+				}
+				
+				// Case 3: Regular search with no dropdown - try to generate if button enabled
+				if (!this.generateBtn.disabled) {
+					event.preventDefault();
+					this.generateList();
+				}
+			}
+			
+			// Handle Tab key for card selection and dropdown dismissal
+			if (event.key === 'Tab') {
+				// Case 1: If dropdown is active, select highlighted result and hide dropdown
+				if (this.searchResults.classList.contains('active')) {
+					event.preventDefault(); // Prevent default tab behavior temporarily
+					this.selectHighlightedResult();
+					this.hideSearchResults();
+					
+					// After selection, allow natural tab progression to next element
+					// We'll use a small timeout to let the DOM update first
+					setTimeout(() => {
+						// Find all focusable elements
+						const focusableElements = Array.from(document.querySelectorAll(
+							'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+						)).filter(el => !el.disabled && el.offsetParent !== null);
+						
+						const currentIndex = focusableElements.indexOf(this.cardSearch);
+						const nextIndex = currentIndex + 1;
+						
+						if (nextIndex < focusableElements.length) {
+							focusableElements[nextIndex].focus();
+						}
+					}, 10);
+					return;
+				}
+				
+				// Case 2: If no dropdown active, allow normal tab behavior (default)
+				// No action needed - let the browser handle normal tab navigation
+			}
+		};
+
+	// HandleSearchBlur method
+	this.handleSearchBlur = () => {
+		const query = this.cardSearch.value.trim();
+		if (query.startsWith('http') || query.includes('edhrec.com')) {
+			const urlCommander = this.extractCommanderFromURL(query);
+			const isUpgradeGuide = this.isUpgradeGuideURL(query);
+			
+			if ((urlCommander || isUpgradeGuide) && this.generateBtn) {
+				this.generateBtn.disabled = false;
+				if (isUpgradeGuide) {
+					this.showStatus(`Ready to generate upgrade guide from URL`);
+				} else {
+					this.showStatus(`Ready to generate list for commander from URL`);
+				}
+			}
+		}
+	};
+
+		// Set up all event listeners
+		document.addEventListener('click', this.handleDocumentClick);
+		
+		if (this.cardSearch) {
+			// For arrow keys and Escape only
+			this.cardSearch.addEventListener('keydown', this.handleSearchKeydown);
+			// For Enter and Tab keys (unified handler)
+			this.cardSearch.addEventListener('keydown', this.unifiedKeyHandler);
+			// For URL detection on blur
+			this.cardSearch.addEventListener('blur', this.handleSearchBlur);
+		}
+	}
+
+	navigateSearchResults(direction) {
+		const results = this.searchResults.querySelectorAll('.search-result');
+		if (results.length === 0) return;
+
+		let currentIndex = -1;
+		
+		results.forEach((result, index) => {
+			if (result.classList.contains('selected')) {
+				currentIndex = index;
+				result.classList.remove('selected');
+			}
+		});
+
+		let newIndex = currentIndex + direction;
+		if (newIndex < 0) newIndex = results.length - 1;
+		if (newIndex >= results.length) newIndex = 0;
+
+		results[newIndex].classList.add('selected');
+		results[newIndex].scrollIntoView({ block: 'nearest' });
+	}
+
+	selectHighlightedResult() {
+		const selectedResult = this.searchResults.querySelector('.search-result.selected');
+		if (selectedResult) {
+			selectedResult.click();
+		} else {
+			const firstResult = this.searchResults.querySelector('.search-result');
+			if (firstResult) {
+				firstResult.click();
+			}
+		}
+	}
+	
+	checkSymbolCacheVersion() {
+		const currentVersion = window.symbolDatabase?.database?.version;
+		const lastVersion = localStorage.getItem('symbolCacheVersion');
+		
+		if (currentVersion && currentVersion !== lastVersion) {
+			console.log(`🔄 Symbol format changed (${lastVersion} → ${currentVersion}), clearing caches`);
+			
+			// Clear CardDisplayEngine cache
+			if (this.displayEngine?.cardCache) {
+				this.displayEngine.cardCache.clear();
+			}
+			
+			// Update version tracking
+			localStorage.setItem('symbolCacheVersion', currentVersion);
+			return true; // Cache was cleared
+		}
+		
+		return false; // No change
+	}
+	
+    /**
+     * ENHANCED URL DETECTION: Check if input is an upgrade guide URL
+     * Why: Route to appropriate extraction method based on URL type
+     * @param {string} url - User input to check
+     * @returns {boolean} True if URL is an EDHREC upgrade guide
+     */
+    isUpgradeGuideURL(url) {
+        if (!url || typeof url !== 'string') return false;
+        
+        const upgradeGuidePatterns = [
+            /edhrec\.com\/articles\/.*upgrade.*guide/i,
+            /edhrec\.com\/articles\/.*upgrade/i,
+            /edhrec\.com\/articles\/.*guide/i
+        ];
+        
+        return upgradeGuidePatterns.some(pattern => pattern.test(url));
+    }
+
+    /**
+     * UPGRADE GUIDE HANDLER: Process upgrade guide URLs
+     * Flow: Detect → Extract → Display
+     * @param {string} url - EDHREC upgrade guide URL
+     */
+    async handleUpgradeGuide(url) {
+        console.log('🎯 Handling upgrade guide URL:', url);
+        
+        this.showLoading();
+        this.hideError();
+        this.hideStatus();
+
+        try {
+            // STEP 1: Extract guide content using our new system
+            const guideData = await window.extractEDHRECUpgradeGuide(url);
+            
+            // STEP 2: Validate we got meaningful content
+            if (!guideData || !guideData.contentBlocks || guideData.contentBlocks.length === 0) {
+                throw new Error('No upgrade guide content could be extracted');
+            }
+
+            // STEP 3: Display the guide using our new display engine
+            await this.displayUpgradeGuide(guideData);
+            this.hideLoading();
+            
+            this.showStatus(`Successfully loaded upgrade guide: ${guideData.title}`);
+            
+        } catch (error) {
+            this.hideLoading();
+            this.showError(`Failed to load upgrade guide: ${error.message}`);
+            console.error('Upgrade guide handling error:', error);
+        }
+    }
+
+    /**
+     * UPGRADE GUIDE DISPLAY: Render guide in main content area
+     * Why: Use existing UI container for consistent user experience
+     * @param {Object} guideData - Structured guide data from extractor
+     */
+    async displayUpgradeGuide(guideData) {
+        if (!this.cardGrid) {
+            throw new Error('No card grid container available');
+        }
+        
+        try {
+            // Clear existing content
+            this.cardGrid.innerHTML = '';
+            
+            // Create and use upgrade guide display engine
+            const guideDisplay = new UpgradeGuideDisplayEngine();
+            await guideDisplay.displayUpgradeGuide(guideData, this.cardGrid);
+            
+        } catch (error) {
+            console.error('Upgrade guide display error:', error);
+            this.cardGrid.innerHTML = `
+                <div class="error-message">
+                    <h3>Error Displaying Upgrade Guide</h3>
+                    <p>${error.message}</p>
+                </div>
+            `;
+			throw error; // Re-throw to handle in calling method
+        }
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('DOM fully loaded and parsed');
+    
+    try {
+        window.app = new App();
+        
+    } catch (error) {
+        console.error('CRITICAL: App initialization failed:', error);
+    }
+});
+
+window.addEventListener('error', function(event) {
+    console.error('Global error caught:', event.error);
+});
+
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('Unhandled promise rejection:', event.reason);
+});

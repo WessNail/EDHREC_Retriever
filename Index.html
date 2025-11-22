@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EDHREC List Generator</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+</head>
+<body>
+	<header class="app-header">
+		<div class="app-title">
+			<h1>EDHREC List Generator</h1>
+		</div>
+		
+		<div class="controls-bar">
+			<div class="controls-left">
+				<div class="filter-control">
+					<label for="pdfCutoff">PDF Cut off %:</label>
+					<input type="number" id="pdfCutoff" min="0" max="100" value="5" step="1">
+				</div>
+				<button id="loadBtn" class="control-btn" title="Load card list from file">
+					<span>📁</span> Load
+				</button>
+				<button id="downloadTextBtn" class="control-btn" title="Download text file">
+					<span>📄</span> Download Text
+				</button>
+				<button id="generatePdfBtn" class="control-btn" title="Generate PDF in new tab">
+					<span>📊</span> Generate PDF
+				</button>
+				<button id="printBtn" class="control-btn" title="Print list">
+					<span>🖨️</span> Print
+				</button>			
+			</div>
+			
+			<div class="controls-right">
+				<div class="size-controls">
+					<button id="sizeDown" class="size-btn" title="Decrease text size">A-</button>
+					<span class="size-label" id="sizeDisplay">Medium</span>
+					<button id="sizeUp" class="size-btn" title="Increase text size">A+</button>
+				</div>
+			</div>
+		</div>
+	</header>
+
+    <main class="app-main">
+        <section class="search-section">
+            <div class="search-container">
+                <input type="text" id="cardSearch" placeholder="Search for a commander or paste EDHREC URL..." autocomplete="off">
+                <div id="searchResults" class="search-dropdown"></div>
+                <button id="generateBtn" class="generate-btn" disabled>Generate List</button>
+            </div>
+            <div class="status-message" id="statusMessage"></div>
+        </section>
+
+        <section class="content-section">
+            <div id="loadingSpinner" class="loading-spinner hidden">
+                <div class="spinner"></div>
+                <p>Extracting card data from EDHREC...</p>
+            </div>
+
+            <div id="errorMessage" class="error-message hidden"></div>
+
+            <div id="cardGrid" class="card-grid">
+                <!-- Dynamic card frames will be inserted here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Hidden file input for load functionality -->
+    <input type="file" id="fileInput" accept=".txt,.json" style="display: none;">
+
+    <script src="scryfall.js"></script>
+	<script src="symbol-manager.js"></script>
+    <script src="edhrec.js"></script>
+    <script src="display.js"></script>
+    <script src="export.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
