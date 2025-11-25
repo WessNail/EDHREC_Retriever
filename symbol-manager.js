@@ -74,6 +74,7 @@ class SymbolManager {
 			}
 			
 			this.initialized = true;
+			overlay.remove();
 			return true;
 			
 		} catch (error) {
@@ -858,3 +859,4 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
