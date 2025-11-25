@@ -9,11 +9,14 @@ class SymbolManager {
 	async initialize() {
 		if (this.initialized) return true;
 		
-		// Create simple loading overlay
+		// Create simple loading overlay - FIXED: semi-transparent background
 		const overlay = document.createElement('div');
-		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;justify-content:center;align-items:center;z-index:10001;color:white;font-family:Arial,sans-serif;';
-		overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;"><div style="font-size:24px;margin-bottom:10px;">⏳</div><div style="font-size:16px;">Loading card symbols...</div></div>';
+		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:10001;color:white;font-family:Arial,sans-serif;';
+		overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;border:2px solid #3498db;"><div style="font-size:24px;margin-bottom:10px;">⏳</div><div style="font-size:16px;margin-bottom:5px;">Loading Card Symbols</div><div style="font-size:12px;color:#bdc3c7;">This may take a moment...</div></div>';
 		document.body.appendChild(overlay);
+		
+		// FIX: Store reference for cleanup
+		this._loadingOverlay = overlay;
 		
 		try {
 			console.log('🔄 Symbol database initialization starting...');
@@ -67,8 +70,10 @@ class SymbolManager {
 			
 		} catch (error) {
 			console.error('❌ Symbol database initialization failed:', error);
-					overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;"><div style="font-size:24px;margin-bottom:10px;">⚠️</div><div style="font-size:16px;">Using fallback symbols</div></div>';
-					setTimeout(() => overlay.remove(), 2000);
+			if (overlay && overlay.parentNode) {
+				overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;border:2px solid #e74c3c;"><div style="font-size:24px;margin-bottom:10px;">⚠️</div><div style="font-size:16px;">Using Fallback Symbols</div></div>';
+				setTimeout(() => this.removeLoadingOverlay(), 2000);
+			}
 			this.database = this.createEmptyDatabase();
 			this.initialized = true;
 			return false;
@@ -815,6 +820,14 @@ async convertSvgToDataURL(svgUrl) {
 		console.log(`✅ Migrated ${migratedCount} symbols to PNG format`);
 		return migratedCount;
 	}
+	
+	/ ADD THIS METHOD to SymbolManager class for cleanup
+removeLoadingOverlay() {
+    if (this._loadingOverlay && this._loadingOverlay.parentNode) {
+        this._loadingOverlay.remove();
+        this._loadingOverlay = null;
+    }
+}
 
 }
 
