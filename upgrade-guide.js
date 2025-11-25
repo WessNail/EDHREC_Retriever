@@ -552,27 +552,50 @@ class UpgradeGuideDisplayEngine {
         return container;
     }
 
+    // ENHANCED FIX: Match main app's dynamic grid system
     async displayUpgradeCards(cardNames, container) {
         console.log(`🃏 Displaying ${cardNames.length} upgrade cards using existing grid system`);
         
-        // Use the same pattern as main app for card display
         const cardData = cardNames.map(name => ({
             name: name,
             inclusion: 'Upgrade Guide'
         }));
-
-        // Create section header like main app does
+    
+        // Create section header
         const sectionHeader = document.createElement('div');
         sectionHeader.className = 'section-header';
         sectionHeader.textContent = `Upgrade Cards (${cardNames.length})`;
         container.appendChild(sectionHeader);
-
-        // Use existing display engine to create card frames (this will handle symbols automatically)
-        const cardFrames = await this.displayEngine.createCardFrames(cardData, 'md');
+    
+        // Create grid container with same logic as main app
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'card-grid';
+        
+        // Use the same font size as main app for consistent column calculation
+        const currentFontSize = window.app?.fontSize || 'md';
+        gridContainer.classList.add(`columns-${this.getColumnCount(currentFontSize)}`);
+        
+        container.appendChild(gridContainer);
+    
+        const cardFrames = await this.displayEngine.createCardFrames(cardData, currentFontSize);
         
         cardFrames.forEach(frame => {
-            container.appendChild(frame);
+            gridContainer.appendChild(frame);
         });
+    
+        console.log(`✅ Upgrade cards displayed in ${this.getColumnCount(currentFontSize)}-column grid: ${cardFrames.length} cards`);
+    }
+    
+    // Helper method to match main app's column logic
+    getColumnCount(fontSize) {
+        const sizeToColumns = {
+            'xs': '6',
+            'sm': '5', 
+            'md': '4',
+            'lg': '3',
+            'xl': '3'
+        };
+        return sizeToColumns[fontSize] || '4';
     }
 
     escapeHTML(str) {
@@ -606,3 +629,4 @@ async function extractEDHRECUpgradeGuide(url) {
 window.extractEDHRECUpgradeGuide = extractEDHRECUpgradeGuide;
 
 console.log('✅ upgrade-guide.js loaded with professional NFD integration - NO FALLBACKS');
+
