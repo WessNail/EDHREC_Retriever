@@ -25,6 +25,7 @@ class SymbolManager {
 			border: 1px solid #3498db;
 		`;
 		document.body.appendChild(overlay);
+		console.log('🔴 OVERLAY CREATED');
 		
 		try {
 			console.log('🔄 Symbol database initialization starting...');
@@ -72,18 +73,21 @@ class SymbolManager {
 					await this.migrateExistingToPNG();
 				}
 			}
-			
+
+			console.log('🟡 DATABASE LOAD COMPLETE');
 			this.initialized = true;
-			overlay.remove();
-			return true;
+			
+	        console.log('🟢 REMOVING OVERLAY');
+	        overlay.remove();
+	        console.log('✅ OVERLAY REMOVED');
 			
 		} catch (error) {
 			console.error('❌ Symbol database initialization failed:', error);
 			this.database = this.createEmptyDatabase();
 			this.initialized = true;
 			
-			// ALWAYS remove the overlay when done
-			overlay.remove();
+	        console.log('🟢 REMOVING OVERLAY (ERROR)');
+	        overlay.remove();
 			return false;
 		}
 		
@@ -859,4 +863,5 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
 
