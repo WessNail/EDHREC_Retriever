@@ -846,7 +846,6 @@ if (document.readyState === 'loading') {
         window.symbolDatabase.initialize().then(success => {
             if (success) {
                 console.log('Symbol database initialized successfully');
-				overlay.remove();
             }
         });
     });
@@ -854,10 +853,10 @@ if (document.readyState === 'loading') {
     window.symbolDatabase.initialize().then(success => {
         if (success) {
             console.log('Symbol database initialized successfully');
-			overlay.remove();
         }
     });
 }
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
