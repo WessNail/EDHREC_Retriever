@@ -439,21 +439,24 @@ class UpgradeGuideDisplayEngine {
             const header = this.createGuideHeader(guideData);
             container.appendChild(header);
 
-            // Process all content blocks
-            for (const block of guideData.contentBlocks) {
+            // Group content blocks for better display
+            const groupedBlocks = this.groupContentBlocks(guideData.contentBlocks);
+            
+            // Process grouped blocks
+            for (const group of groupedBlocks) {
                 try {
-                    const blockElement = await this.createContentBlock(block);
-                    if (blockElement) {
-                        container.appendChild(blockElement);
+                    const groupElement = await this.createContentGroup(group);
+                    if (groupElement) {
+                        container.appendChild(groupElement);
                     }
                 } catch (error) {
-                    console.error(`❌ Block rendering failed:`, error);
-                    const errorElement = this.createErrorBlock(block, error);
+                    console.error(`❌ Group rendering failed:`, error);
+                    const errorElement = this.createErrorBlock(group, error);
                     container.appendChild(errorElement);
                 }
             }
 
-            // Display upgrade cards using existing CardDisplayEngine
+            // Display upgrade cards using grid layout
             if (guideData.upgradeCards && guideData.upgradeCards.length > 0) {
                 await this.displayUpgradeCards(guideData.upgradeCards, container);
             }
@@ -464,6 +467,34 @@ class UpgradeGuideDisplayEngine {
             console.error('❌ Upgrade guide rendering failed:', error);
             throw new EDHRECDisplayError(`Rendering failed: ${error.message}`);
         }
+    }
+
+    // Group consecutive paragraphs together
+    groupContentBlocks(contentBlocks) {
+        const groups = [];
+        let currentGroup = [];
+
+        for (const block of contentBlocks) {
+            if (block.type === 'header' || block.type === 'decklist') {
+                // Push current group if it has content
+                if (currentGroup.length > 0) {
+                    groups.push({ type: 'paragraph-group', blocks: currentGroup });
+                    currentGroup = [];
+                }
+                // Push the header or decklist as individual group
+                groups.push(block);
+            } else if (block.type === 'paragraph') {
+                // Add paragraph to current group
+                currentGroup.push(block);
+            }
+        }
+
+        // Don't forget the last group
+        if (currentGroup.length > 0) {
+            groups.push({ type: 'paragraph-group', blocks: currentGroup });
+        }
+
+        return groups;
     }
 
     createGuideHeader(guideData) {
@@ -499,23 +530,31 @@ class UpgradeGuideDisplayEngine {
         return header;
     }
 
-    async createContentBlock(block) {
-        console.log('🔄 Rendering content block:', block.type, block.text?.substring(0, 30) || block.title);
-
-        switch (block.type) {
-            case 'header':
-                return this.createHeaderBlock(block);
-                
-            case 'paragraph':
-                return this.createParagraphBlock(block);
-                
-            case 'decklist':
-                return this.createDecklistBlock(block);
-                
-            default:
-                console.warn('⚠️ Unknown content block type:', block.type);
-                return null;
+    async createContentGroup(group) {
+        if (group.type === 'paragraph-group') {
+            return this.createParagraphGroup(group.blocks);
+        } else if (group.type === 'header') {
+            return this.createHeaderBlock(group);
+        } else if (group.type === 'decklist') {
+            return this.createDecklistBlock(group);
+        } else {
+            console.warn('⚠️ Unknown content group type:', group.type);
+            return null;
         }
+    }
+
+    createParagraphGroup(paragraphs) {
+        const container = document.createElement('div');
+        container.className = 'guide-paragraph-group';
+        
+        paragraphs.forEach(paragraph => {
+            const p = document.createElement('p');
+            // Preserve line breaks
+            p.innerHTML = paragraph.text.replace(/\n/g, '<br>');
+            container.appendChild(p);
+        });
+        
+        return container;
     }
 
     createHeaderBlock(block) {
@@ -523,17 +562,6 @@ class UpgradeGuideDisplayEngine {
         header.className = `guide-header level-${block.level}`;
         header.textContent = block.text;
         return header;
-    }
-
-    createParagraphBlock(block) {
-        const paragraph = document.createElement('div');
-        paragraph.className = 'guide-paragraph';
-        
-        // Preserve line breaks and handle card mentions
-        const textWithBreaks = block.text.replace(/\n/g, '<br>');
-        paragraph.innerHTML = textWithBreaks;
-        
-        return paragraph;
     }
 
     createDecklistBlock(block) {
@@ -544,10 +572,15 @@ class UpgradeGuideDisplayEngine {
         title.textContent = block.title;
         container.appendChild(title);
 
+        const sectionsContainer = document.createElement('div');
+        sectionsContainer.className = 'decklist-section';
+
         block.sections.forEach(section => {
+            const sectionDiv = document.createElement('div');
+            
             const sectionHeader = document.createElement('h5');
             sectionHeader.textContent = section.name;
-            container.appendChild(sectionHeader);
+            sectionDiv.appendChild(sectionHeader);
 
             const list = document.createElement('ul');
             section.cards.forEach(card => {
@@ -555,28 +588,35 @@ class UpgradeGuideDisplayEngine {
                 item.textContent = `${card.quantity} ${card.name}`;
                 list.appendChild(item);
             });
-            container.appendChild(list);
+            sectionDiv.appendChild(list);
+            
+            sectionsContainer.appendChild(sectionDiv);
         });
 
+        container.appendChild(sectionsContainer);
         return container;
     }
 
     async displayUpgradeCards(cardNames, container) {
         if (!cardNames || cardNames.length === 0) return;
 
-        console.log(`🃏 Displaying ${cardNames.length} upgrade cards`);
+        console.log(`🃏 Displaying ${cardNames.length} upgrade cards in grid layout`);
         
         try {
+            // Create grid container for upgrade cards
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'upgrade-cards-grid card-grid columns-4';
+
             // Create section header
             const sectionHeader = document.createElement('div');
             sectionHeader.className = 'section-header';
-            sectionHeader.textContent = 'Upgrade Cards';
-            container.appendChild(sectionHeader);
+            sectionHeader.textContent = `Upgrade Cards (${cardNames.length})`;
+            gridContainer.appendChild(sectionHeader);
 
             // Prepare card data for display engine
             const cardData = cardNames.map(name => ({
                 name: name,
-                inclusion: 'Upgrade' // Placeholder for display consistency
+                inclusion: 'Upgrade Guide'
             }));
 
             // Use existing CardDisplayEngine for consistent card frames
@@ -584,11 +624,16 @@ class UpgradeGuideDisplayEngine {
             
             cardFrames.forEach(frame => {
                 if (frame instanceof DocumentFragment) {
-                    container.appendChild(frame);
+                    // Handle document fragments
+                    while (frame.firstChild) {
+                        gridContainer.appendChild(frame.firstChild);
+                    }
                 } else {
-                    container.appendChild(frame);
+                    gridContainer.appendChild(frame);
                 }
             });
+
+            container.appendChild(gridContainer);
 
         } catch (error) {
             console.error('❌ Upgrade cards display failed:', error);
