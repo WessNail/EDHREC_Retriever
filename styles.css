@@ -726,8 +726,7 @@ body {
 
 
 /* ==========================================================================
-   UPGRADE GUIDE STYLES
-   Purpose: Style upgrade guide content blocks to match original app aesthetic
+   UPGRADE GUIDE STYLES - IMPROVED LAYOUT
    ========================================================================== */
 
 /* Guide Header - Title and Metadata */
@@ -771,7 +770,7 @@ body {
     font-weight: 600;
 }
 
-/* Header level sizing (matches original app hierarchy) */
+/* Header level sizing */
 .guide-header.level-1 { 
     font-size: var(--font-size-xl);
     margin-top: 0;
@@ -791,7 +790,26 @@ body {
     font-size: var(--font-size-sm);
 }
 
-/* Paragraph Blocks - Text content as-is */
+/* Paragraph Grouping - NEW: Combine consecutive paragraphs */
+.guide-paragraph-group {
+    line-height: 1.6;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-md);
+    background: var(--card-background);
+    border-radius: var(--border-radius);
+    border-left: 4px solid var(--secondary-color);
+    box-shadow: var(--shadow);
+}
+
+.guide-paragraph-group p {
+    margin-bottom: var(--spacing-sm);
+}
+
+.guide-paragraph-group p:last-child {
+    margin-bottom: 0;
+}
+
+/* Individual Paragraph Blocks (fallback) */
 .guide-paragraph {
     line-height: 1.6;
     margin-bottom: var(--spacing-lg);
@@ -802,31 +820,93 @@ body {
     box-shadow: var(--shadow);
 }
 
-/* Card List Blocks - Decklists and card lists */
+/* Compact Decklist Styling - MODIFIED */
 .guide-cardlist {
-    margin: var(--spacing-lg) 0;
-    padding: var(--spacing-md);
+    margin: var(--spacing-md) 0;
+    padding: var(--spacing-sm);
     background: var(--card-background);
     border-radius: var(--border-radius);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow);
 }
 
-.guide-cardlist .ordered-list,
-.guide-cardlist .unordered-list {
+.guide-cardlist h4 {
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-sm);
+    font-size: var(--font-size-md);
+    font-weight: 600;
+}
+
+.guide-cardlist h5 {
+    color: var(--secondary-color);
+    margin: var(--spacing-sm) 0 var(--spacing-xs) 12px; /* Indentation */
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+/* Multi-column decklist layout - NEW */
+.decklist-section {
+    columns: 3 250px; /* Auto columns, min 250px width */
+    column-gap: var(--spacing-md);
     margin: 0;
-    padding-left: var(--spacing-lg);
+    padding: 0;
 }
 
-.guide-cardlist li {
-    margin-bottom: var(--spacing-xs);
-    line-height: 1.4;
-    padding: var(--spacing-xs) 0;
-    border-bottom: 1px solid #f0f0f0;
+.decklist-section > div {
+    break-inside: avoid;
+    margin-bottom: var(--spacing-sm);
 }
 
-.guide-cardlist li:last-child {
-    border-bottom: none;
+.decklist-section ul {
+    break-inside: avoid;
+    margin: 0 0 0 12px; /* Indentation */
+    padding: 0;
+    list-style: none;
+}
+
+.decklist-section li {
+    margin-bottom: 2px; /* Minimal line spacing */
+    padding: 1px 0;
+    line-height: 1.2;
+    font-size: var(--font-size-sm);
+    break-inside: avoid;
+}
+
+/* Ensure upgrade cards use grid layout - NEW */
+.upgrade-cards-grid {
+    display: grid;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-xl);
+}
+
+.upgrade-cards-grid .section-header {
+    grid-column: 1 / -1;
+    background: var(--primary-color);
+    color: white;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--card-border-radius);
+    margin-bottom: var(--spacing-sm);
+}
+
+/* Responsive decklist columns - NEW */
+@media (max-width: 768px) {
+    .decklist-section {
+        columns: 2 200px;
+    }
+}
+
+@media (max-width: 480px) {
+    .decklist-section {
+        columns: 1;
+    }
+    
+    .guide-cardlist h5 {
+        margin-left: 8px;
+    }
+    
+    .decklist-section ul {
+        margin-left: 8px;
+    }
 }
 
 /* Individual Card Blocks - Use existing card frame styles */
@@ -857,6 +937,7 @@ body {
         gap: var(--spacing-xs);
     }
     
+    .guide-paragraph-group,
     .guide-paragraph {
         padding: var(--spacing-sm);
         margin-bottom: var(--spacing-md);
@@ -882,7 +963,6 @@ body {
     }
 }
 
-
 /* Print Styles */
 @media print {
     .app-header,
@@ -899,5 +979,6 @@ body {
     .card-grid {
         gap: 0.5cm;
     }
+
 
 }
