@@ -9,7 +9,15 @@ class SymbolManager {
 	async initialize() {
 		if (this.initialized) return true;
 		
+		// Create simple loading overlay
+		const overlay = document.createElement('div');
+		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;justify-content:center;align-items:center;z-index:10001;color:white;font-family:Arial,sans-serif;';
+		overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;"><div style="font-size:24px;margin-bottom:10px;">⏳</div><div style="font-size:16px;">Loading card symbols...</div></div>';
+		document.body.appendChild(overlay);
+		
 		try {
+			console.log('🔄 Symbol database initialization starting...');
+			
 			// Try to load from localStorage first
 			this.database = this.loadFromStorage();
 			
@@ -58,7 +66,9 @@ class SymbolManager {
 			return true;
 			
 		} catch (error) {
-			console.error('Failed to initialize symbol database:', error);
+			console.error('❌ Symbol database initialization failed:', error);
+					overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;"><div style="font-size:24px;margin-bottom:10px;">⚠️</div><div style="font-size:16px;">Using fallback symbols</div></div>';
+					setTimeout(() => overlay.remove(), 2000);
 			this.database = this.createEmptyDatabase();
 			this.initialized = true;
 			return false;
