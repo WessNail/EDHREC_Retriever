@@ -54,7 +54,8 @@ class SymbolManager {
 				this.updateConversionTracking();
 				this.saveToStorage();
 			}
-			
+
+			/*
 			// FORCE REFRESH logic remains but now with enhanced criteria
 			if (this.database && (this.database.version === '3.0' || this.isDatabaseCorrupted())) {
 				console.log('🔄 Detected problematic database, forcing refresh with auto-conversion...');
@@ -69,6 +70,7 @@ class SymbolManager {
 				console.log(`Loaded optimized symbol database with ${Object.keys(this.database.sets).length} sets`);
 				this.verifyDatabase(); // Show current stats
 			}
+			*/
 			
 			// ADD AFTER DATABASE IS LOADED:
 			if (this.database && this.database.version.includes('png')) {
@@ -881,4 +883,5 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
 
