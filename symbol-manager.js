@@ -8,6 +8,13 @@ class SymbolManager {
 
 	async initialize() {
 		if (this.initialized) return true;
+
+		// REMOVE ANY EXISTING OVERLAY FIRST to prevent duplicates
+		const existingOverlay = document.getElementById('symbolLoadingOverlay');
+		if (existingOverlay) {
+			existingOverlay.remove();
+			console.log('🔄 Removed duplicate overlay');
+		}
 		
 		// Create simple overlay
 		const overlay = document.createElement('div');
@@ -874,3 +881,4 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
