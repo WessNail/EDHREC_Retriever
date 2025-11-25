@@ -8,7 +8,7 @@ class SymbolManager {
 
 	async initialize() {
 		if (this.initialized) return true;
-
+		
 		// REMOVE ANY EXISTING OVERLAY FIRST to prevent duplicates
 		const existingOverlay = document.getElementById('symbolLoadingOverlay');
 		if (existingOverlay) {
@@ -612,11 +612,11 @@ class SymbolManager {
 		// Consider database corrupted if:
 		// - Less than 150 sets OR
 		// - Less than 80% data URL coverage (for PDF compatibility) OR  
-		// - Wrong version (not data URL enabled)
+		// - Wrong version (not data URL or png enabled)
 		const isCorrupted = totalSets < 150 || 
 						   (dataUrlCount / totalSets) < 0.8 ||
-						   !this.database.version.includes('dataurl');
-		
+						   (!this.database.version.includes('dataurl') && !this.database.version.includes('png'));  // BOTH must be false
+				
 		if (isCorrupted) {
 			console.log(`❌ Database appears corrupted or not data URL optimized:`, {
 				totalSets,
@@ -881,4 +881,3 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
-
