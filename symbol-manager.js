@@ -100,6 +100,7 @@ class SymbolManager {
 		}
 		
 		// Check if cache needs invalidation due to format change
+		const previousVersion = localStorage.getItem('symbolCacheVersion');
 		if (this.database.version !== previousVersion && previousVersion) {
 			console.log('🔄 Database format changed, clearing caches...');
 			this.clearAllCaches();
