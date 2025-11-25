@@ -417,9 +417,8 @@ class EDHRECUpgradeGuideExtractor {
 
 class UpgradeGuideDisplayEngine {
     constructor() {
-        this.scryfall = new ScryfallAPI();
-        this.cardDisplayEngine = new CardDisplayEngine();
-        this.cardCache = new Map();
+        // Use existing display engine from main app
+        this.displayEngine = window.app?.displayEngine || new CardDisplayEngine();
     }
 
     async displayUpgradeGuide(guideData, container) {
@@ -427,41 +426,26 @@ class UpgradeGuideDisplayEngine {
             throw new EDHRECDisplayError('No container provided for display');
         }
 
-        console.log('🎨 Rendering upgrade guide:', {
-            title: guideData.title,
-            blocks: guideData.contentBlocks.length,
-            upgradeCards: guideData.upgradeCards.length
-        });
+        console.log('🎨 Rendering upgrade guide with existing app functionality');
 
         try {
-            // Clear container and show guide header
             container.innerHTML = '';
             const header = this.createGuideHeader(guideData);
             container.appendChild(header);
 
-            // Group content blocks for better display
+            // Group content blocks
             const groupedBlocks = this.groupContentBlocks(guideData.contentBlocks);
             
-            // Process grouped blocks
+            // Process content using existing patterns
             for (const group of groupedBlocks) {
-                try {
-                    const groupElement = await this.createContentGroup(group);
-                    if (groupElement) {
-                        container.appendChild(groupElement);
-                    }
-                } catch (error) {
-                    console.error(`❌ Group rendering failed:`, error);
-                    const errorElement = this.createErrorBlock(group, error);
-                    container.appendChild(errorElement);
-                }
+                const groupElement = await this.createContentGroup(group);
+                if (groupElement) container.appendChild(groupElement);
             }
 
-            // Display upgrade cards using grid layout
-            if (guideData.upgradeCards && guideData.upgradeCards.length > 0) {
+            // Use existing card grid system for upgrade cards
+            if (guideData.upgradeCards?.length > 0) {
                 await this.displayUpgradeCards(guideData.upgradeCards, container);
             }
-
-            console.log('✅ Upgrade guide rendered successfully');
 
         } catch (error) {
             console.error('❌ Upgrade guide rendering failed:', error);
@@ -469,27 +453,22 @@ class UpgradeGuideDisplayEngine {
         }
     }
 
-    // Group consecutive paragraphs together
     groupContentBlocks(contentBlocks) {
         const groups = [];
         let currentGroup = [];
 
         for (const block of contentBlocks) {
             if (block.type === 'header' || block.type === 'decklist') {
-                // Push current group if it has content
                 if (currentGroup.length > 0) {
                     groups.push({ type: 'paragraph-group', blocks: currentGroup });
                     currentGroup = [];
                 }
-                // Push the header or decklist as individual group
                 groups.push(block);
             } else if (block.type === 'paragraph') {
-                // Add paragraph to current group
                 currentGroup.push(block);
             }
         }
 
-        // Don't forget the last group
         if (currentGroup.length > 0) {
             groups.push({ type: 'paragraph-group', blocks: currentGroup });
         }
@@ -501,45 +480,29 @@ class UpgradeGuideDisplayEngine {
         const header = document.createElement('div');
         header.className = 'upgrade-guide-header';
         
-        const titleElement = document.createElement('h1');
-        titleElement.className = 'guide-title';
-        titleElement.textContent = guideData.title;
-        header.appendChild(titleElement);
-
-        if (guideData.author || guideData.date) {
-            const metaContainer = document.createElement('div');
-            metaContainer.className = 'guide-meta';
-            
-            if (guideData.author) {
-                const authorElement = document.createElement('div');
-                authorElement.className = 'guide-author';
-                authorElement.textContent = `By ${guideData.author}`;
-                metaContainer.appendChild(authorElement);
-            }
-            
-            if (guideData.date) {
-                const dateElement = document.createElement('div');
-                dateElement.className = 'guide-date';
-                dateElement.textContent = guideData.date;
-                metaContainer.appendChild(dateElement);
-            }
-            
-            header.appendChild(metaContainer);
-        }
+        header.innerHTML = `
+            <h1 class="guide-title">${this.escapeHTML(guideData.title)}</h1>
+            ${guideData.author || guideData.date ? `
+                <div class="guide-meta">
+                    ${guideData.author ? `<div class="guide-author">By ${this.escapeHTML(guideData.author)}</div>` : ''}
+                    ${guideData.date ? `<div class="guide-date">${this.escapeHTML(guideData.date)}</div>` : ''}
+                </div>
+            ` : ''}
+        `;
 
         return header;
     }
 
     async createContentGroup(group) {
-        if (group.type === 'paragraph-group') {
-            return this.createParagraphGroup(group.blocks);
-        } else if (group.type === 'header') {
-            return this.createHeaderBlock(group);
-        } else if (group.type === 'decklist') {
-            return this.createDecklistBlock(group);
-        } else {
-            console.warn('⚠️ Unknown content group type:', group.type);
-            return null;
+        switch (group.type) {
+            case 'paragraph-group':
+                return this.createParagraphGroup(group.blocks);
+            case 'header':
+                return this.createHeaderBlock(group);
+            case 'decklist':
+                return this.createDecklistBlock(group);
+            default:
+                return null;
         }
     }
 
@@ -549,7 +512,6 @@ class UpgradeGuideDisplayEngine {
         
         paragraphs.forEach(paragraph => {
             const p = document.createElement('p');
-            // Preserve line breaks
             p.innerHTML = paragraph.text.replace(/\n/g, '<br>');
             container.appendChild(p);
         });
@@ -568,28 +530,21 @@ class UpgradeGuideDisplayEngine {
         const container = document.createElement('div');
         container.className = 'guide-cardlist';
         
-        const title = document.createElement('h4');
-        title.textContent = block.title;
-        container.appendChild(title);
-
+        container.innerHTML = `<h4>${this.escapeHTML(block.title)}</h4>`;
+        
         const sectionsContainer = document.createElement('div');
         sectionsContainer.className = 'decklist-section';
 
         block.sections.forEach(section => {
             const sectionDiv = document.createElement('div');
-            
-            const sectionHeader = document.createElement('h5');
-            sectionHeader.textContent = section.name;
-            sectionDiv.appendChild(sectionHeader);
-
-            const list = document.createElement('ul');
-            section.cards.forEach(card => {
-                const item = document.createElement('li');
-                item.textContent = `${card.quantity} ${card.name}`;
-                list.appendChild(item);
-            });
-            sectionDiv.appendChild(list);
-            
+            sectionDiv.innerHTML = `
+                <h5>${this.escapeHTML(section.name)}</h5>
+                <ul>
+                    ${section.cards.map(card => 
+                        `<li>${card.quantity} ${this.escapeHTML(card.name)}</li>`
+                    ).join('')}
+                </ul>
+            `;
             sectionsContainer.appendChild(sectionDiv);
         });
 
@@ -598,58 +553,33 @@ class UpgradeGuideDisplayEngine {
     }
 
     async displayUpgradeCards(cardNames, container) {
-        if (!cardNames || cardNames.length === 0) return;
-
-        console.log(`🃏 Displaying ${cardNames.length} upgrade cards in grid layout`);
+        console.log(`🃏 Displaying ${cardNames.length} upgrade cards using existing grid system`);
         
-        try {
-            // Create grid container for upgrade cards
-            const gridContainer = document.createElement('div');
-            gridContainer.className = 'upgrade-cards-grid card-grid columns-4';
+        // Use the same pattern as main app for card display
+        const cardData = cardNames.map(name => ({
+            name: name,
+            inclusion: 'Upgrade Guide'
+        }));
 
-            // Create section header
-            const sectionHeader = document.createElement('div');
-            sectionHeader.className = 'section-header';
-            sectionHeader.textContent = `Upgrade Cards (${cardNames.length})`;
-            gridContainer.appendChild(sectionHeader);
+        // Create section header like main app does
+        const sectionHeader = document.createElement('div');
+        sectionHeader.className = 'section-header';
+        sectionHeader.textContent = `Upgrade Cards (${cardNames.length})`;
+        container.appendChild(sectionHeader);
 
-            // Prepare card data for display engine
-            const cardData = cardNames.map(name => ({
-                name: name,
-                inclusion: 'Upgrade Guide'
-            }));
-
-            // Use existing CardDisplayEngine for consistent card frames
-            const cardFrames = await this.cardDisplayEngine.createCardFrames(cardData, 'md');
-            
-            cardFrames.forEach(frame => {
-                if (frame instanceof DocumentFragment) {
-                    // Handle document fragments
-                    while (frame.firstChild) {
-                        gridContainer.appendChild(frame.firstChild);
-                    }
-                } else {
-                    gridContainer.appendChild(frame);
-                }
-            });
-
-            container.appendChild(gridContainer);
-
-        } catch (error) {
-            console.error('❌ Upgrade cards display failed:', error);
-            throw new EDHRECDisplayError(`Upgrade cards display failed: ${error.message}`);
-        }
+        // Use existing display engine to create card frames (this will handle symbols automatically)
+        const cardFrames = await this.displayEngine.createCardFrames(cardData, 'md');
+        
+        cardFrames.forEach(frame => {
+            container.appendChild(frame);
+        });
     }
 
-    createErrorBlock(block, error) {
-        const errorDiv = document.createElement('div');
-        errorDiv.className = 'error-message';
-        errorDiv.innerHTML = `
-            <strong>Content Block Error</strong>
-            <p>Type: ${block.type}</p>
-            <p>Error: ${error.message}</p>
-        `;
-        return errorDiv;
+    escapeHTML(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
     }
 }
 
