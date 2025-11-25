@@ -821,13 +821,13 @@ async convertSvgToDataURL(svgUrl) {
 		return migratedCount;
 	}
 	
-	/ ADD THIS METHOD to SymbolManager class for cleanup
-removeLoadingOverlay() {
-    if (this._loadingOverlay && this._loadingOverlay.parentNode) {
-        this._loadingOverlay.remove();
-        this._loadingOverlay = null;
-    }
-}
+		// ADD THIS METHOD to SymbolManager class for cleanup
+	removeLoadingOverlay() {
+	    if (this._loadingOverlay && this._loadingOverlay.parentNode) {
+	        this._loadingOverlay.remove();
+	        this._loadingOverlay = null;
+	    }
+	}
 
 }
 
@@ -859,3 +859,4 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
