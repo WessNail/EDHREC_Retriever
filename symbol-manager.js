@@ -24,6 +24,7 @@ class SymbolManager {
 			font-family: Arial;
 			border: 1px solid #3498db;
 		`;
+		overlay.id = 'symbolLoadingOverlay';
 		document.body.appendChild(overlay);
 		console.log('🔴 OVERLAY CREATED');
 		
@@ -73,21 +74,28 @@ class SymbolManager {
 					await this.migrateExistingToPNG();
 				}
 			}
-
+			
 			console.log('🟡 DATABASE LOAD COMPLETE');
 			this.initialized = true;
-			
-	        console.log('🟢 REMOVING OVERLAY');
-	        overlay.remove();
-	        console.log('✅ OVERLAY REMOVED');
+			 console.log('🟢 REMOVING OVERLAY - SUCCESS');
+			const overlayToRemove = document.getElementById('symbolLoadingOverlay');
+			if (overlayToRemove) {
+				overlayToRemove.remove();
+				console.log('✅ OVERLAY REMOVED - SUCCESS PATH');
+			}
+			return true;
 			
 		} catch (error) {
 			console.error('❌ Symbol database initialization failed:', error);
 			this.database = this.createEmptyDatabase();
 			this.initialized = true;
 			
-	        console.log('🟢 REMOVING OVERLAY (ERROR)');
-	        overlay.remove();
+			console.log('🟢 REMOVING OVERLAY - ERROR PATH');
+			const overlayToRemove = document.getElementById('symbolLoadingOverlay');
+			if (overlayToRemove) {
+				overlayToRemove.remove();
+				console.log('✅ OVERLAY REMOVED - ERROR PATH');
+			}
 			return false;
 		}
 		
@@ -845,23 +853,23 @@ window.repairSymbolDatabase = () => window.symbolDatabase.repairDatabase();
 window.symbolDatabase = new SymbolManager();
 
 // Auto-initialize when DOM is ready
+const initSymbolDatabase = async () => {
+    try {
+        const success = await window.symbolDatabase.initialize();
+        console.log(`Symbol database initialization ${success ? 'succeeded' : 'failed'}`);
+    } catch (error) {
+        console.error('Symbol database initialization error:', error);
+        // Ensure overlay is removed even on unhandled errors
+        const overlay = document.getElementById('symbolLoadingOverlay');
+        if (overlay) overlay.remove();
+    }
+};
+
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.symbolDatabase.initialize().then(success => {
-            if (success) {
-                console.log('Symbol database initialized successfully');
-            }
-        });
-    });
+    document.addEventListener('DOMContentLoaded', initSymbolDatabase);
 } else {
-    window.symbolDatabase.initialize().then(success => {
-        if (success) {
-            console.log('Symbol database initialized successfully');
-        }
-    });
+    initSymbolDatabase();
 }
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
-
-
