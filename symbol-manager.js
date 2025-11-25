@@ -62,7 +62,7 @@ class SymbolManager {
 				return true;
 			}
 			
-			if (!this.database || !this.database.version.includes('dataurl')) {
+			if (!this.database || (!this.database.version.includes('dataurl') || !this.database.version.includes('png'))) {
 				console.log('Symbol database not found or not data URL optimized, downloading...');
 				await this.downloadBulkSymbols();
 			} else {
@@ -881,3 +881,4 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
+
