@@ -872,30 +872,47 @@ body {
     break-inside: avoid;
 }
 
-/* Ensure upgrade cards use grid layout - NEW */
-.upgrade-cards-grid {
-    display: grid;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-xl);
-}
-
-.upgrade-cards-grid .section-header {
-    grid-column: 1 / -1;
-    background: var(--primary-color);
-    color: white;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--card-border-radius);
-    margin-bottom: var(--spacing-sm);
-}
-
-/* Responsive decklist columns - NEW */
+/* Responsive Design for Upgrade Guides */
 @media (max-width: 768px) {
+    .upgrade-guide-header {
+        padding: var(--spacing-md);
+        margin-bottom: var(--spacing-lg);
+    }
+    
+    .guide-meta {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+    
+    .guide-paragraph-group,
+    .guide-paragraph {
+        padding: var(--spacing-sm);
+        margin-bottom: var(--spacing-md);
+    }
+    
+    .guide-cardlist {
+        padding: var(--spacing-sm);
+        margin: var(--spacing-md) 0;
+    }
+    
     .decklist-section {
         columns: 2 200px;
     }
 }
 
 @media (max-width: 480px) {
+    .guide-title {
+        font-size: var(--font-size-lg);
+    }
+    
+    .guide-header.level-1 {
+        font-size: var(--font-size-lg);
+    }
+    
+    .guide-header.level-2 {
+        font-size: var(--font-size-md);
+    }
+    
     .decklist-section {
         columns: 1;
     }
@@ -925,43 +942,6 @@ body {
     background: #fff9e6;
 }
 
-/* Responsive Design for Upgrade Guides */
-@media (max-width: 768px) {
-    .upgrade-guide-header {
-        padding: var(--spacing-md);
-        margin-bottom: var(--spacing-lg);
-    }
-    
-    .guide-meta {
-        flex-direction: column;
-        gap: var(--spacing-xs);
-    }
-    
-    .guide-paragraph-group,
-    .guide-paragraph {
-        padding: var(--spacing-sm);
-        margin-bottom: var(--spacing-md);
-    }
-    
-    .guide-cardlist {
-        padding: var(--spacing-sm);
-        margin: var(--spacing-md) 0;
-    }
-}
-
-@media (max-width: 480px) {
-    .guide-title {
-        font-size: var(--font-size-lg);
-    }
-    
-    .guide-header.level-1 {
-        font-size: var(--font-size-lg);
-    }
-    
-    .guide-header.level-2 {
-        font-size: var(--font-size-md);
-    }
-}
 
 /* Print Styles */
 @media print {
@@ -979,6 +959,5 @@ body {
     .card-grid {
         gap: 0.5cm;
     }
-
 
 }
