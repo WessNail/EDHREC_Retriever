@@ -9,14 +9,22 @@ class SymbolManager {
 	async initialize() {
 		if (this.initialized) return true;
 		
-		// Create simple loading overlay - FIXED: semi-transparent background
+		// Create simple overlay
 		const overlay = document.createElement('div');
-		overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);display:flex;justify-content:center;align-items:center;z-index:10001;color:white;font-family:Arial,sans-serif;';
-		overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;border:2px solid #3498db;"><div style="font-size:24px;margin-bottom:10px;">⏳</div><div style="font-size:16px;margin-bottom:5px;">Loading Card Symbols</div><div style="font-size:12px;color:#bdc3c7;">This may take a moment...</div></div>';
+		overlay.innerHTML = '🔄 Loading Symbols...';
+		overlay.style.cssText = `
+			position: fixed;
+			top: 20px;
+			right: 20px;
+			background: rgba(44, 62, 80, 0.9);
+			color: white;
+			padding: 10px 15px;
+			border-radius: 5px;
+			z-index: 10001;
+			font-family: Arial;
+			border: 1px solid #3498db;
+		`;
 		document.body.appendChild(overlay);
-		
-		// FIX: Store reference for cleanup
-		this._loadingOverlay = overlay;
 		
 		try {
 			console.log('🔄 Symbol database initialization starting...');
@@ -70,12 +78,11 @@ class SymbolManager {
 			
 		} catch (error) {
 			console.error('❌ Symbol database initialization failed:', error);
-			if (overlay && overlay.parentNode) {
-				overlay.innerHTML = '<div style="text-align:center;background:#2c3e50;padding:30px;border-radius:10px;border:2px solid #e74c3c;"><div style="font-size:24px;margin-bottom:10px;">⚠️</div><div style="font-size:16px;">Using Fallback Symbols</div></div>';
-				setTimeout(() => this.removeLoadingOverlay(), 2000);
-			}
 			this.database = this.createEmptyDatabase();
 			this.initialized = true;
+			
+			// ALWAYS remove the overlay when done
+			overlay.remove();
 			return false;
 		}
 		
@@ -819,15 +826,7 @@ async convertSvgToDataURL(svgUrl) {
 		
 		console.log(`✅ Migrated ${migratedCount} symbols to PNG format`);
 		return migratedCount;
-	}
-	
-		// ADD THIS METHOD to SymbolManager class for cleanup
-	removeLoadingOverlay() {
-	    if (this._loadingOverlay && this._loadingOverlay.parentNode) {
-	        this._loadingOverlay.remove();
-	        this._loadingOverlay = null;
-	    }
-	}
+	}	
 
 }
 
@@ -859,4 +858,3 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
-
