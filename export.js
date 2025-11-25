@@ -5,20 +5,30 @@ class ExportManager {
         this.debug = window.debugSystem || (window.app && window.app.debug);
     }
 
-    async generatePdf(cardData, filename = 'edhrec-list.pdf') {
-		
-		console.log('PDF Generation: Starting with filter logic');
+	async generatePdf(cardData, filename = 'edhrec-list.pdf') {
+		console.log('PDF Generation: Starting with content detection');
 		
 		try {
-			// Get cutoff value from UI
+			// DETECT CONTENT TYPE - Check if we're dealing with upgrade guide
+			const cardGrid = document.getElementById('cardGrid');
+			if (!cardGrid) throw new Error('Card grid element not found');
+			
+			const isUpgradeGuide = cardGrid.querySelector('.upgrade-guide-header') !== null ||
+								  cardGrid.querySelector('.guide-paragraph-group') !== null ||
+								  cardGrid.querySelector('.guide-cardlist') !== null;
+			
+			console.log(`📊 Content type: ${isUpgradeGuide ? 'Upgrade Guide' : 'Card Grid'}`);
+			
+			// Get cutoff value from UI (only applies to card grids)
 			const cutoffInput = document.getElementById('pdfCutoff');
 			const cutoffPercent = cutoffInput ? parseFloat(cutoffInput.value) || 0 : 0;
 			
 			console.log(`PDF Filter: Cutoff set to ${cutoffPercent}%`);
 			
-			// Apply DOM filtering if cutoff specified
 			let restorationData = null;
-			if (cutoffPercent > 0) {
+			
+			// APPLY FILTERING ONLY FOR CARD GRIDS (upgrade guides don't have inclusion percentages)
+			if (!isUpgradeGuide && cutoffPercent > 0) {
 				restorationData = this.filterDOMForPDF(cutoffPercent);
 			}
 
@@ -31,127 +41,12 @@ class ExportManager {
 			const pageWidth = 210;
 			const pageHeight = 297;
 			const margin = 8;
-			const cardsPerRow = 4;
-			const cardsPerColumn = 6;
-			const MAX_PAGES = 100;
 			
-			const availableWidth = pageWidth - (2 * margin);
-			const availableHeight = pageHeight - (2 * margin);
-			
-			const cardWidth = availableWidth / cardsPerRow;
-			const cardHeight = availableHeight / cardsPerColumn;
-			const sectionHeaderHeight = 8;
-
-			// Get content structure from filtered DOM
-			const cardGrid = document.getElementById('cardGrid');
-			if (!cardGrid) throw new Error('Card grid element not found');
-
-			const gridChildren = Array.from(cardGrid.children);
-
-			// GROUP ELEMENTS BY SECTION
-			const sections = this.groupElementsBySection(gridChildren);
-
-			console.log(`PDF Layout: Processing ${sections.length} sections from filtered DOM`);
-
-			// LAYOUT ENGINE
-			let currentPage = 1;
-			let currentY = margin;
-			let currentCol = 0;
-
-			for (const section of sections) {
-				// CHECK PAGE LIMIT FIRST
-				if (currentPage > MAX_PAGES) {
-					console.log('PDF Layout: Reached page limit, stopping');
-					break;
-				}
-				
-				const { header, cards } = section;
-				
-				// Filter out any cards that are still hidden (safety check)
-				const visibleCards = cards.filter(card => card.style.display !== 'none');
-				
-				if (visibleCards.length === 0) continue;
-				
-				// CHECK IF SECTION CAN START ON CURRENT PAGE
-				const spaceNeeded = (header ? sectionHeaderHeight : 0) + cardHeight;
-				
-				if (currentY + spaceNeeded > (pageHeight - margin)) {
-					pdf.addPage();
-					currentPage++;
-					currentY = margin;
-					currentCol = 0;
-					
-					if (currentPage > MAX_PAGES) break;
-				}
-				
-				// PLACE SECTION HEADER
-				if (header) {
-					this.addPrintSectionHeader(pdf, header.textContent, margin, currentY, availableWidth, sectionHeaderHeight);
-					currentY += sectionHeaderHeight;
-					currentCol = 0;
-				}
-				
-				// PLACE SECTION CARDS
-				for (let i = 0; i < visibleCards.length; i++) {
-					if (currentPage > MAX_PAGES) break;
-					
-					const card = visibleCards[i];
-					
-					// Check if we need new row
-					if (currentCol >= cardsPerRow) {
-						currentCol = 0;
-						currentY += cardHeight;
-					}
-					
-					// Check if card fits
-					if (currentY + cardHeight > (pageHeight - margin)) {
-						pdf.addPage();
-						currentPage++;
-						currentY = margin;
-						currentCol = 0;
-						if (currentPage > MAX_PAGES) break;
-					}
-					
-					const cardX = margin + (currentCol * cardWidth);
-					
-					await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
-					
-					currentCol++;
-				}
-				
-				// COMPLETE CURRENT ROW AFTER SECTION
-				if (currentCol !== 0 && currentPage <= MAX_PAGES) {
-					currentY += cardHeight;
-					currentCol = 0;
-					
-					if (currentY > (pageHeight - margin) && currentPage <= MAX_PAGES) {
-						pdf.addPage();
-						currentPage++;
-						currentY = margin;
-						currentCol = 0;
-						if (currentPage > MAX_PAGES) break;
-					}
-				}
-			}
-
-			const totalPages = pdf.internal.getNumberOfPages();
-			
-			// FIX: Delete any extra pages beyond MAX_PAGES
-			if (totalPages > MAX_PAGES) {
-				for (let i = totalPages; i > MAX_PAGES; i--) {
-					pdf.deletePage(i);
-				}
-			}
-
-			// Now get the final page count after deletion
-			const finalPageCount = Math.min(totalPages, MAX_PAGES);
-
-			// Add page numbers only to the pages we kept
-			for (let i = 1; i <= finalPageCount; i++) {
-				pdf.setPage(i);
-				pdf.setFontSize(8);
-				pdf.setTextColor(100, 100, 100);
-				pdf.text(`${i}`, pageWidth - 10, pageHeight - 5);
+			// BRANCH BASED ON CONTENT TYPE
+			if (isUpgradeGuide) {
+				await this.generateUpgradeGuidePDF(pdf, pageWidth, pageHeight, margin);
+			} else {
+				await this.generateCardGridPDF(pdf, pageWidth, pageHeight, margin, cutoffPercent);
 			}
 
 			// Download
@@ -160,10 +55,9 @@ class ExportManager {
 			
 			console.log('PDF Generation: Completed successfully');
 			
-			// RESTORE DOM regardless of success/failure
+			// RESTORE DOM if filtering was applied
 			if (restorationData) {
 				this.restoreDOMAfterPDF(restorationData);
-				console.log('PDF Filter: DOM restoration completed');
 			}
 			
 			return true;
@@ -175,7 +69,6 @@ class ExportManager {
 			// CRITICAL: Always restore DOM on error
 			if (restorationData) {
 				this.restoreDOMAfterPDF(restorationData);
-				console.log('PDF Filter: Emergency DOM restoration completed');
 			}
 			
 			throw error;
@@ -569,7 +462,305 @@ class ExportManager {
 		});
 	}
 	
-	
+	/**
+	 * Generate PDF for upgrade guide content (articles, paragraphs, decklists)
+	 * Uses different layout logic than card grids
+	 */
+	async generateUpgradeGuidePDF(pdf, pageWidth, pageHeight, margin) {
+		console.log('📄 Generating Upgrade Guide PDF');
+		
+		const cardGrid = document.getElementById('cardGrid');
+		if (!cardGrid) throw new Error('Card grid element not found');
+
+		const availableWidth = pageWidth - (2 * margin);
+		let currentY = margin;
+		let currentPage = 1;
+		const MAX_PAGES = 50;
+
+		// Process all child elements in order
+		const children = Array.from(cardGrid.children);
+		
+		for (const element of children) {
+			if (currentPage > MAX_PAGES) {
+				console.log('PDF Layout: Reached maximum page limit');
+				break;
+			}
+			
+			// Estimate how much space this element needs
+			const elementHeight = this.estimateUpgradeElementHeight(element, availableWidth);
+			
+			// Check if we need a new page
+			if (currentY + elementHeight > (pageHeight - margin)) {
+				pdf.addPage();
+				currentPage++;
+				currentY = margin;
+				if (currentPage > MAX_PAGES) break;
+			}
+			
+			// Render the element to PDF
+			await this.renderUpgradeElementToPDF(pdf, element, margin, currentY, availableWidth, elementHeight);
+			
+			// Move Y position for next element
+			currentY += elementHeight + 5; // 5mm gap between elements
+		}
+
+		// Add page numbers to all pages
+		this.addPageNumbersToPDF(pdf, pageWidth, pageHeight);
+	}
+
+	/**
+	 * Estimate height for upgrade guide elements in millimeters
+	 * Different element types need different height calculations
+	 */
+	estimateUpgradeElementHeight(element, availableWidth) {
+		const classList = element.classList;
+		
+		// Upgrade guide header (title + metadata)
+		if (classList.contains('upgrade-guide-header')) {
+			return 25; // Fixed height for headers
+		}
+		
+		// Paragraph groups (multiple paragraphs combined)
+		else if (classList.contains('guide-paragraph-group')) {
+			const text = element.textContent || '';
+			const approxLines = Math.ceil(text.length / 100); // Rough chars per line estimate
+			return Math.max(20, approxLines * 4); // 4mm per line, minimum 20mm
+		}
+		
+		// Individual paragraphs
+		else if (classList.contains('guide-paragraph')) {
+			const text = element.textContent || '';
+			const approxLines = Math.ceil(text.length / 100);
+			return Math.max(15, approxLines * 4);
+		}
+		
+		// Headers (H1-H6 in guide content)
+		else if (classList.contains('guide-header')) {
+			return 12; // Fixed height for section headers
+		}
+		
+		// Decklists with card lists
+		else if (classList.contains('guide-cardlist')) {
+			const listItems = element.querySelectorAll('li');
+			return 15 + (listItems.length * 3); // 3mm per list item
+		}
+		
+		// Section headers in card displays
+		else if (classList.contains('section-header')) {
+			return 10; // Fixed height for section headers
+		}
+		
+		// Individual card frames
+		else if (classList.contains('card-frame')) {
+			return 45; // Fixed height for card displays
+		}
+		
+		// Default for unknown elements
+		else {
+			console.warn('Unknown element type for height estimation:', element.className);
+			return 30; // Safe default height
+		}
+	}
+
+	/**
+	 * Render upgrade guide elements to PDF with proper styling
+	 * Uses html2canvas to capture each element as image
+	 */
+	async renderUpgradeElementToPDF(pdf, element, x, y, width, height) {
+		try {
+			const canvas = await html2canvas(element, {
+				scale: 1.5, // Higher scale for better quality
+				useCORS: true,
+				allowTaint: true,
+				backgroundColor: '#ffffff',
+				onclone: function(clonedDoc, element) {
+					// APPLY PDF-SPECIFIC STYLING TO ALL ELEMENTS
+					const allElements = element.querySelectorAll('*');
+					allElements.forEach(el => {
+						// Force black text on white background for print
+						el.style.color = '#000000';
+						el.style.backgroundColor = '#ffffff';
+						el.style.boxShadow = 'none';
+						
+						// Remove any potential transparency
+						if (el.style.opacity) el.style.opacity = '1';
+					});
+					
+					// SPECIFIC STYLING FOR CARD FRAMES (if present in upgrade guide)
+					const cardFrames = element.querySelectorAll('.card-frame');
+					cardFrames.forEach(frame => {
+						frame.style.border = '1px solid #888888';
+						frame.style.background = '#ffffff';
+					});
+					
+					// ENHANCE SYMBOL VISIBILITY FOR PDF
+					const symbolElements = element.querySelectorAll('.set-symbol-stats');
+					symbolElements.forEach(symbol => {
+						symbol.style.transform = 'scale(1.4)';
+						symbol.style.transformOrigin = 'center center';
+					});
+					
+					// ENSURE TEXT READABILITY
+					const textElements = element.querySelectorAll('p, span, div, li');
+					textElements.forEach(textEl => {
+						textEl.style.color = '#000000';
+						textEl.style.fontWeight = 'normal';
+					});
+				}
+			});
+
+			// Convert canvas to image data and add to PDF
+			const imgData = canvas.toDataURL('image/png');
+			pdf.addImage(imgData, 'PNG', x, y, width, height);
+			
+			// ADD SUBTLE BORDER AROUND EACH ELEMENT FOR VISUAL SEPARATION
+			pdf.setDrawColor(200, 200, 200); // Light gray border
+			pdf.setLineWidth(0.1);
+			pdf.rect(x, y, width, height, 'D');
+			
+			return true;
+			
+		} catch (error) {
+			console.error('Upgrade element render failed:', error);
+			
+			// FALLBACK: Draw simple bounding box with element type label
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(136, 136, 136);
+			pdf.setLineWidth(0.3);
+			pdf.rect(x, y, width, height, 'FD');
+			
+			pdf.setTextColor(0, 0, 0);
+			pdf.setFontSize(6);
+			
+			const elementType = element.className || 'content-element';
+			const truncatedType = elementType.length > 30 ? elementType.substring(0, 30) + '...' : elementType;
+			pdf.text(`[${truncatedType}]`, x + 2, y + 4);
+			
+			return false;
+		}
+	}
+
+	/**
+	 * Enhanced card grid PDF generation (existing logic with minor improvements)
+	 * Handles traditional card displays with inclusion percentages
+	 */
+	async generateCardGridPDF(pdf, pageWidth, pageHeight, margin, cutoffPercent) {
+		console.log('🃏 Generating Card Grid PDF');
+		
+		// CARD GRID LAYOUT CONSTANTS
+		const cardsPerRow = 4;
+		const cardsPerColumn = 6;
+		const sectionHeaderHeight = 8;
+
+		const availableWidth = pageWidth - (2 * margin);
+		const availableHeight = pageHeight - (2 * margin);
+		
+		const cardWidth = availableWidth / cardsPerRow;
+		const cardHeight = availableHeight / cardsPerColumn;
+
+		const cardGrid = document.getElementById('cardGrid');
+		if (!cardGrid) throw new Error('Card grid element not found');
+
+		// Group elements into sections (headers + cards)
+		const gridChildren = Array.from(cardGrid.children);
+		const sections = this.groupElementsBySection(gridChildren);
+
+		console.log(`PDF Layout: Processing ${sections.length} card sections`);
+
+		let currentPage = 1;
+		let currentY = margin;
+		let currentCol = 0;
+		const MAX_PAGES = 100;
+
+		// PROCESS EACH SECTION
+		for (const section of sections) {
+			if (currentPage > MAX_PAGES) break;
+			
+			const { header, cards } = section;
+			
+			// Filter out hidden cards (from cutoff filtering)
+			const visibleCards = cards.filter(card => card.style.display !== 'none');
+			if (visibleCards.length === 0) continue;
+			
+			// CHECK IF SECTION HEADER FITS ON CURRENT PAGE
+			const spaceNeeded = (header ? sectionHeaderHeight : 0) + cardHeight;
+			if (currentY + spaceNeeded > (pageHeight - margin)) {
+				pdf.addPage();
+				currentPage++;
+				currentY = margin;
+				currentCol = 0;
+				if (currentPage > MAX_PAGES) break;
+			}
+			
+			// PLACE SECTION HEADER
+			if (header) {
+				this.addPrintSectionHeader(pdf, header.textContent, margin, currentY, availableWidth, sectionHeaderHeight);
+				currentY += sectionHeaderHeight;
+				currentCol = 0;
+			}
+			
+			// PLACE SECTION CARDS
+			for (let i = 0; i < visibleCards.length; i++) {
+				if (currentPage > MAX_PAGES) break;
+				
+				const card = visibleCards[i];
+				
+				// Check if we need new row
+				if (currentCol >= cardsPerRow) {
+					currentCol = 0;
+					currentY += cardHeight;
+				}
+				
+				// Check if card fits on current page
+				if (currentY + cardHeight > (pageHeight - margin)) {
+					pdf.addPage();
+					currentPage++;
+					currentY = margin;
+					currentCol = 0;
+					if (currentPage > MAX_PAGES) break;
+				}
+				
+				const cardX = margin + (currentCol * cardWidth);
+				
+				// Use existing card rendering logic
+				await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+				
+				currentCol++;
+			}
+			
+			// MOVE TO NEXT ROW AFTER SECTION COMPLETION
+			if (currentCol !== 0 && currentPage <= MAX_PAGES) {
+				currentY += cardHeight;
+				currentCol = 0;
+				
+				// Check if we need new page after section
+				if (currentY > (pageHeight - margin) && currentPage <= MAX_PAGES) {
+					pdf.addPage();
+					currentPage++;
+					currentY = margin;
+					currentCol = 0;
+					if (currentPage > MAX_PAGES) break;
+				}
+			}
+		}
+
+		// ADD PAGE NUMBERS TO FINAL DOCUMENT
+		this.addPageNumbersToPDF(pdf, pageWidth, pageHeight);
+	}
+
+	/**
+	 * Add consistent page numbering to all pages in PDF
+	 */
+	addPageNumbersToPDF(pdf, pageWidth, pageHeight) {
+		const totalPages = pdf.internal.getNumberOfPages();
+		
+		for (let i = 1; i <= totalPages; i++) {
+			pdf.setPage(i);
+			pdf.setFontSize(8);
+			pdf.setTextColor(100, 100, 100);
+			pdf.text(`Page ${i} of ${totalPages}`, pageWidth - 25, pageHeight - 5);
+		}
+	}
 	
 }
 
