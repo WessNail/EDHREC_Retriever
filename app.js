@@ -221,17 +221,20 @@ class App {
 		let commanderToUse = this.currentCommander;
 		let searchInput = this.cardSearch.value.trim();
 		
-		// === SET CONTENT TYPE BASED ON INPUT ===
+		// === IMPROVED: DETECT CONTENT TYPE WITH STATE RESET ===
 		this.contentType = this.determineContentType(searchInput);
 		console.log(`🎯 Starting generation for content type: ${this.contentType}`);
-			
+		
+		// RESET STATE BEFORE PROCESSING - CRITICAL FIX
+		this.resetStateForContentType(this.contentType);
+		
 		// Handle upgrade guide URLs first
 		if (this.contentType === 'upgrade-guide') {
 			await this.handleUpgradeGuide(searchInput);
 			return;
 		}
-				
-		// Handle URL input if no commander selected
+		
+		// Handle URL input if no commander selected but URL detected
 		if (!commanderToUse && searchInput) {
 			const urlCommander = this.extractCommanderFromURL(searchInput);
 			if (urlCommander) {
@@ -329,52 +332,57 @@ class App {
         return total;
     }
 
-    async displayCards(cardData) {
-        if (!this.cardGrid) {
-            return;
-        }
+	async displayCards(cardData) {
+		if (!this.cardGrid) {
+			return;
+		}
 
-        this.cardGrid.innerHTML = '';
-        
-        if (!cardData || Object.keys(cardData).length === 0) {
-            this.cardGrid.innerHTML = '<p class="text-center">No card data found</p>';
-            return;
-        }
+		this.cardGrid.innerHTML = '';
+		
+		if (!cardData || Object.keys(cardData).length === 0) {
+			this.cardGrid.innerHTML = '<p class="text-center">No card data found</p>';
+			return;
+		}
 
-        try {
-            if (!this.displayEngine) {
-                this.displayEngine = new CardDisplayEngine();
-            }
+		try {
+			if (!this.displayEngine) {
+				this.displayEngine = new CardDisplayEngine();
+			}
+			
+			// ENHANCED: Ensure proper grid layout for commander lists
+			if (this.contentType === 'commander-list' || this.contentType === 'custom-list') {
+				this.updateGridColumns(); // Apply grid classes for commander lists
+			} else {
+				this.resetCardGridLayout(); // Use base layout for other content types
+			}
 			
 			// CRITICAL FIX: AWAIT SYMBOL DATABASE READINESS BEFORE RENDERING
 			await this.displayEngine.ensureSymbolSupport();
 
-            this.updateGridColumns();
+			for (const [sectionName, sectionCards] of Object.entries(cardData)) {
+				if (sectionCards.length > 0) {
+					const sectionHeader = document.createElement('div');
+					sectionHeader.className = 'section-header';
+					
+					if (sectionName === "Commander") {
+						sectionHeader.textContent = `${sectionName}`;
+					} else {
+						sectionHeader.textContent = `${sectionName} (${sectionCards.length} cards)`;
+					}
+					
+					this.cardGrid.appendChild(sectionHeader);
 
-            for (const [sectionName, sectionCards] of Object.entries(cardData)) {
-                if (sectionCards.length > 0) {
-                    const sectionHeader = document.createElement('div');
-                    sectionHeader.className = 'section-header';
-                    
-                    if (sectionName === "Commander") {
-                        sectionHeader.textContent = `${sectionName}`;
-                    } else {
-                        sectionHeader.textContent = `${sectionName} (${sectionCards.length} cards)`;
-                    }
-                    
-                    this.cardGrid.appendChild(sectionHeader);
-
-                    const cardFrames = await this.displayEngine.createCardFrames(sectionCards, this.fontSize);
-                    cardFrames.forEach((frame, index) => {
-                        this.cardGrid.appendChild(frame);
-                    });
-                }
-            }
-            
-        } catch (error) {
-            this.cardGrid.innerHTML = '<p class="text-center">Error displaying cards</p>';
-        }
-    }
+					const cardFrames = await this.displayEngine.createCardFrames(sectionCards, this.fontSize);
+					cardFrames.forEach((frame, index) => {
+						this.cardGrid.appendChild(frame);
+					});
+				}
+			}
+			
+		} catch (error) {
+			this.cardGrid.innerHTML = '<p class="text-center">Error displaying cards</p>';
+		}
+	}
 
     updateGridColumns() {
 		if (!this.cardGrid) return;
@@ -915,71 +923,147 @@ class App {
         }
     }
 
-    /**
-     * UPGRADE GUIDE DISPLAY: Render guide in main content area
-     * Why: Use existing UI container for consistent user experience
-     * @param {Object} guideData - Structured guide data from extractor
-     */
-    async displayUpgradeGuide(guideData) {
-        if (!this.cardGrid) {
-            throw new Error('No card grid container available');
-        }
-        
-        try {
-            // Clear existing content
-            this.cardGrid.innerHTML = '';
-            
-            // Create and use upgrade guide display engine
-            const guideDisplay = new UpgradeGuideDisplayEngine();
-            await guideDisplay.displayUpgradeGuide(guideData, this.cardGrid);
-            
-        } catch (error) {
-            console.error('Upgrade guide display error:', error);
-            this.cardGrid.innerHTML = `
-                <div class="error-message">
-                    <h3>Error Displaying Upgrade Guide</h3>
-                    <p>${error.message}</p>
-                </div>
-            `;
-			throw error; // Re-throw to handle in calling method
-        }
-    }
+	/**
+	 * UPGRADE GUIDE DISPLAY: Render guide in main content area
+	 * Enhanced with proper layout reset to prevent commander list pollution
+	 * @param {Object} guideData - Structured guide data from extractor
+	 */
+	async displayUpgradeGuide(guideData) {
+		if (!this.cardGrid) {
+			throw new Error('No card grid container available');
+		}
+		
+		try {
+			// ENHANCED: Reset card grid for upgrade guide layout
+			this.cardGrid.innerHTML = '';
+			this.resetCardGridLayout(); // Ensure no grid classes from commander lists
+			
+			console.log('🎨 Starting upgrade guide display with clean layout');
+			
+			// Create and use upgrade guide display engine
+			const guideDisplay = new UpgradeGuideDisplayEngine();
+			await guideDisplay.displayUpgradeGuide(guideData, this.cardGrid);
+			
+			console.log('✅ Upgrade guide display completed successfully');
+			
+		} catch (error) {
+			console.error('❌ Upgrade guide display error:', error);
+			this.cardGrid.innerHTML = `
+				<div class="error-message">
+					<h3>Error Displaying Upgrade Guide</h3>
+					<p>${error.message}</p>
+				</div>
+			`;
+			throw error;
+		}
+	}
 	
+	/**
+	 * IMPROVED: Content type detection that prevents state pollution
+	 * Prioritizes URL input and explicitly resets state between types
+	 * @param {string} input - User input (URL or card name)
+	 * @param {string} fileContent - File content for uploads
+	 * @returns {string} Content type
+	 */
 	determineContentType(input, fileContent = null) {
-	    console.log(`🔍 Determining content type for:`, { input, hasFile: !!fileContent });
-	    
-	    // PRIORITY 1: FILE UPLOADS - Highest priority
-	    if (fileContent) {
-	        console.log('✅ Content type: custom-list (file upload)');
-	        return 'custom-list';
-	    }
-	    
-	    // PRIORITY 2: URL-BASED CONTENT DETECTION
-	    if (typeof input === 'string' && input.trim()) {
-	        const trimmedInput = input.trim();
-	        
-	        // Check for upgrade guide URLs first
-	        if (this.isUpgradeGuideURL(trimmedInput)) {
-	            console.log('✅ Content type: upgrade-guide (URL detection)');
-	            return 'upgrade-guide';
-	        }
-	        
-	        // Check for commander URLs second
-	        if (this.extractCommanderFromURL(trimmedInput)) {
-	            console.log('✅ Content type: commander-list (URL detection)');
-	            return 'commander-list';
-	        }
-	    }
-	    
-	    // PRIORITY 3: CURRENTLY SELECTED COMMANDER
-	    if (this.currentCommander) {
-	        console.log('✅ Content type: commander-list (current selection)');
-	        return 'commander-list';
-	    }
-	    
-	    // PRIORITY 4: FALLBACK FOR UNKNOWN CONTENT
-	    console.log('⚠️ Content type: unknown (fallback)');
-	    return 'unknown';
+		console.log('🔍 IMPROVED Content type detection for:', { 
+			input: input?.substring(0, 100), 
+			hasFile: !!fileContent,
+			currentCommander: this.currentCommander?.name 
+		});
+		
+		// PRIORITY 1: FILE UPLOADS - Highest priority
+		if (fileContent) {
+			console.log('✅ Content type: custom-list (file upload)');
+			return 'custom-list';
+		}
+		
+		// PRIORITY 2: URL-BASED CONTENT DETECTION (explicit input)
+		if (typeof input === 'string' && input.trim()) {
+			const trimmedInput = input.trim();
+			
+			// Check for upgrade guide URLs first (most specific)
+			if (this.isUpgradeGuideURL(trimmedInput)) {
+				console.log('✅ Content type: upgrade-guide (explicit URL detection)');
+				return 'upgrade-guide';
+			}
+			
+			// Check for commander URLs second
+			const urlCommander = this.extractCommanderFromURL(trimmedInput);
+			if (urlCommander) {
+				console.log('✅ Content type: commander-list (URL commander detection)');
+				return 'commander-list';
+			}
+		}
+		
+		// PRIORITY 3: CURRENT COMMANDER (only if input matches current commander)
+		// This prevents stale commander state from affecting new requests
+		if (this.currentCommander && input === this.currentCommander.name) {
+			console.log('✅ Content type: commander-list (current selection matches input)');
+			return 'commander-list';
+		}
+		
+		// PRIORITY 4: FALLBACK - Reset to unknown if no clear match
+		console.log('⚠️ Content type: unknown (no clear match, resetting)');
+		return 'unknown';
+	}
+	
+	/**
+	 * Reset application state when switching between content types
+	 * Prevents pollution between commander lists and upgrade guides
+	 * @param {string} newContentType - The new content type being switched to
+	 */
+	resetStateForContentType(newContentType) {
+		console.log('🔄 Resetting state for content type:', newContentType);
+		
+		switch(newContentType) {
+			case 'upgrade-guide':
+				// Reset commander-specific state for upgrade guides
+				this.currentCommander = null;
+				this.cardData = null;
+				console.log('✅ Reset commander state for upgrade guide');
+				break;
+				
+			case 'commander-list':
+				// Keep commander state, but ensure cardData is fresh
+				this.cardData = null;
+				console.log('✅ Reset card data for fresh commander list');
+				break;
+				
+			case 'custom-list':
+				// Reset everything for custom lists
+				this.currentCommander = null;
+				this.cardData = null;
+				console.log('✅ Reset all state for custom list');
+				break;
+		}
+		
+		// Optional: Clear display engine cache to prevent card pollution
+		if (this.displayEngine && this.displayEngine.cardCache) {
+			const cacheSize = this.displayEngine.cardCache.size;
+			this.displayEngine.cardCache.clear();
+			console.log(`✅ Cleared display engine cache (${cacheSize} items)`);
+		}
+		
+		// Reset card grid CSS classes
+		this.resetCardGridLayout();
+	}
+	
+	/**
+	 * Reset card grid CSS classes for proper layout
+	 * Prevents grid classes from commander lists affecting upgrade guides
+	 */
+	resetCardGridLayout() {
+		if (!this.cardGrid) return;
+		
+		// Remove all column classes and reset to base
+		this.cardGrid.className = 'card-grid';
+		console.log('✅ Reset card grid CSS classes to base');
+		
+		// Re-apply font size class if needed
+		if (this.fontSize) {
+			this.cardGrid.classList.add(`font-size-${this.fontSize}`);
+		}
 	}
 }
 
@@ -1001,4 +1085,3 @@ window.addEventListener('error', function(event) {
 window.addEventListener('unhandledrejection', function(event) {
     console.error('Unhandled promise rejection:', event.reason);
 });
-
