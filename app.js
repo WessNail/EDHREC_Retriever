@@ -6,6 +6,7 @@ class App {
         this.cardData = null;
         this.fontSize = 'md';
         this.displayEngine = null;
+		this.contentType = null;
         
         this.initializeElements();
         this.initializeEventListeners();
@@ -220,8 +221,12 @@ class App {
 		let commanderToUse = this.currentCommander;
 		let searchInput = this.cardSearch.value.trim();
 		
+		// === SET CONTENT TYPE BASED ON INPUT ===
+		this.contentType = this.determineContentType(searchInput);
+		console.log(`🎯 Starting generation for content type: ${this.contentType}`);
+			
 		// Handle upgrade guide URLs first
-		if (this.isUpgradeGuideURL(searchInput)) {
+		if (this.contentType === 'upgrade-guide') {
 			await this.handleUpgradeGuide(searchInput);
 			return;
 		}
@@ -407,26 +412,77 @@ class App {
         }
     }
 
-    async generatePdf() {
-        if (!this.cardData || Object.keys(this.cardData).length === 0) {
-            this.showError('No card data available to generate PDF');
-            return;
-        }
+	/**
+	 * Main PDF generation entry point with content type routing
+	 * Uses switch/case for clear pathway selection based on content type
+	 */
+	async generatePdf() {
+		console.log(`📄 PDF Generation requested for content type: ${this.contentType}`);
+		
+		// VALIDATION: Ensure we have a valid content type
+		if (!this.contentType || this.contentType === 'unknown') {
+			this.showError('Please generate content first before creating PDF');
+			return;
+		}
+		
+		// VALIDATION: Ensure DOM content exists
+		const cardGrid = document.getElementById('cardGrid');
+		if (!cardGrid || cardGrid.children.length === 0) {
+			this.showError('No content available to generate PDF');
+			return;
+		}
 
-        try {
-            const exportManager = new ExportManager();
-            const commanderName = this.currentCommander ? 
-                this.currentCommander.name.replace(/[^a-z0-9]/gi, '_') : 'edhrec';
-            const filename = `${commanderName}_list.pdf`;
-            
-            await exportManager.generatePdf(this.cardData, filename);
-            
-            this.showStatus('PDF generated and opened in new tab');
-            
-        } catch (error) {
-            this.showError('Failed to generate PDF: ' + error.message);
-        }
-    }
+		try {
+			const exportManager = new ExportManager();
+			const filename = this.getPDFFilename();
+			
+			// === CONTENT TYPE ROUTING ===
+			console.log(`🔄 Routing to PDF generator for: ${this.contentType}`);
+			
+			switch(this.contentType) {
+				case 'upgrade-guide':
+					// Upgrade guides use DOM-only processing with hybrid layout
+					await exportManager.generateUpgradeGuidePDF(filename);
+					break;
+					
+				case 'commander-list':
+				case 'custom-list':
+					// Commander lists and custom lists use existing data+DOM system
+					await exportManager.generatePdf(this.cardData, filename);
+					break;
+					
+				default:
+					throw new Error(`Unsupported content type for PDF: ${this.contentType}`);
+			}
+			
+			this.showStatus('PDF generated and opened in new tab');
+			
+		} catch (error) {
+			console.error('❌ PDF generation failed:', error);
+			this.showError('Failed to generate PDF: ' + error.message);
+		}
+	}
+
+	// === PDF FILENAME GENERATION ===
+	/**
+	 * Generates appropriate PDF filename based on content type and commander
+	 */
+	getPDFFilename() {
+		const baseName = this.currentCommander ? 
+			this.currentCommander.name.replace(/[^a-z0-9]/gi, '_') : 'edhrec';
+		
+		switch(this.contentType) {
+			case 'upgrade-guide':
+				return `${baseName}_upgrade_guide.pdf`;
+			case 'commander-list':
+				return `${baseName}_commander_list.pdf`;
+			case 'custom-list':
+				return `${baseName}_custom_list.pdf`;
+			default:
+				return `${baseName}_document.pdf`;
+		}
+	}
+
 
     loadList() {
         if (!this.fileInput) {
@@ -497,6 +553,11 @@ class App {
         reader.onload = (e) => {
             try {
                 const content = e.target.result;
+				
+				// === SET CONTENT TYPE FOR FILE UPLOADS ===
+				this.contentType = this.determineContentType(null, content);
+				console.log(`📁 Processing file upload as: ${this.contentType}`);
+				
                 this.parseUploadedFile(content, file.name);
                 
             } catch (error) {
@@ -883,6 +944,43 @@ class App {
 			throw error; // Re-throw to handle in calling method
         }
     }
+	
+	determineContentType(input, fileContent = null) {
+    console.log(`🔍 Determining content type for:`, { input, hasFile: !!fileContent });
+    
+    // PRIORITY 1: FILE UPLOADS - Highest priority
+    if (fileContent) {
+        console.log('✅ Content type: custom-list (file upload)');
+        return 'custom-list';
+    }
+    
+    // PRIORITY 2: URL-BASED CONTENT DETECTION
+    if (typeof input === 'string' && input.trim()) {
+        const trimmedInput = input.trim();
+        
+        // Check for upgrade guide URLs first
+        if (this.isUpgradeGuideURL(trimmedInput)) {
+            console.log('✅ Content type: upgrade-guide (URL detection)');
+            return 'upgrade-guide';
+        }
+        
+        // Check for commander URLs second
+        if (this.extractCommanderFromURL(trimmedInput)) {
+            console.log('✅ Content type: commander-list (URL detection)');
+            return 'commander-list';
+        }
+    }
+    
+    // PRIORITY 3: CURRENTLY SELECTED COMMANDER
+    if (this.currentCommander) {
+        console.log('✅ Content type: commander-list (current selection)');
+        return 'commander-list';
+    }
+    
+    // PRIORITY 4: FALLBACK FOR UNKNOWN CONTENT
+    console.log('⚠️ Content type: unknown (fallback)');
+    return 'unknown';
+}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
