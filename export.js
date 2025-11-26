@@ -463,138 +463,6 @@ class ExportManager {
 	}	
 
 	/**
-	 * Estimate height for upgrade guide elements in millimeters
-	 * Different element types need different height calculations
-	 */
-	estimateUpgradeElementHeight(element, availableWidth) {
-		const classList = element.classList;
-		
-		// Upgrade guide header (title + metadata)
-		if (classList.contains('upgrade-guide-header')) {
-			return 25; // Fixed height for headers
-		}
-		
-		// Paragraph groups (multiple paragraphs combined)
-		else if (classList.contains('guide-paragraph-group')) {
-			const text = element.textContent || '';
-			const approxLines = Math.ceil(text.length / 100); // Rough chars per line estimate
-			return Math.max(20, approxLines * 4); // 4mm per line, minimum 20mm
-		}
-		
-		// Individual paragraphs
-		else if (classList.contains('guide-paragraph')) {
-			const text = element.textContent || '';
-			const approxLines = Math.ceil(text.length / 100);
-			return Math.max(15, approxLines * 4);
-		}
-		
-		// Headers (H1-H6 in guide content)
-		else if (classList.contains('guide-header')) {
-			return 12; // Fixed height for section headers
-		}
-		
-		// Decklists with card lists
-		else if (classList.contains('guide-cardlist')) {
-			const listItems = element.querySelectorAll('li');
-			return 15 + (listItems.length * 3); // 3mm per list item
-		}
-		
-		// Section headers in card displays
-		else if (classList.contains('section-header')) {
-			return 10; // Fixed height for section headers
-		}
-		
-		// Individual card frames
-		else if (classList.contains('card-frame')) {
-			return 45; // Fixed height for card displays
-		}
-		
-		// Default for unknown elements
-		else {
-			console.warn('Unknown element type for height estimation:', element.className);
-			return 30; // Safe default height
-		}
-	}
-
-	/**
-	 * Render upgrade guide elements to PDF with proper styling
-	 * Uses html2canvas to capture each element as image
-	 */
-	async renderUpgradeElementToPDF(pdf, element, x, y, width, height) {
-		try {
-			const canvas = await html2canvas(element, {
-				scale: 1.5, // Higher scale for better quality
-				useCORS: true,
-				allowTaint: true,
-				backgroundColor: '#ffffff',
-				onclone: function(clonedDoc, element) {
-					// APPLY PDF-SPECIFIC STYLING TO ALL ELEMENTS
-					const allElements = element.querySelectorAll('*');
-					allElements.forEach(el => {
-						// Force black text on white background for print
-						el.style.color = '#000000';
-						el.style.backgroundColor = '#ffffff';
-						el.style.boxShadow = 'none';
-						
-						// Remove any potential transparency
-						if (el.style.opacity) el.style.opacity = '1';
-					});
-					
-					// SPECIFIC STYLING FOR CARD FRAMES (if present in upgrade guide)
-					const cardFrames = element.querySelectorAll('.card-frame');
-					cardFrames.forEach(frame => {
-						frame.style.border = '1px solid #888888';
-						frame.style.background = '#ffffff';
-					});
-					
-					// ENHANCE SYMBOL VISIBILITY FOR PDF
-					const symbolElements = element.querySelectorAll('.set-symbol-stats');
-					symbolElements.forEach(symbol => {
-						symbol.style.transform = 'scale(1.4)';
-						symbol.style.transformOrigin = 'center center';
-					});
-					
-					// ENSURE TEXT READABILITY
-					const textElements = element.querySelectorAll('p, span, div, li');
-					textElements.forEach(textEl => {
-						textEl.style.color = '#000000';
-						textEl.style.fontWeight = 'normal';
-					});
-				}
-			});
-
-			// Convert canvas to image data and add to PDF
-			const imgData = canvas.toDataURL('image/png');
-			pdf.addImage(imgData, 'PNG', x, y, width, height);
-			
-			// ADD SUBTLE BORDER AROUND EACH ELEMENT FOR VISUAL SEPARATION
-			pdf.setDrawColor(200, 200, 200); // Light gray border
-			pdf.setLineWidth(0.1);
-			pdf.rect(x, y, width, height, 'D');
-			
-			return true;
-			
-		} catch (error) {
-			console.error('Upgrade element render failed:', error);
-			
-			// FALLBACK: Draw simple bounding box with element type label
-			pdf.setFillColor(255, 255, 255);
-			pdf.setDrawColor(136, 136, 136);
-			pdf.setLineWidth(0.3);
-			pdf.rect(x, y, width, height, 'FD');
-			
-			pdf.setTextColor(0, 0, 0);
-			pdf.setFontSize(6);
-			
-			const elementType = element.className || 'content-element';
-			const truncatedType = elementType.length > 30 ? elementType.substring(0, 30) + '...' : elementType;
-			pdf.text(`[${truncatedType}]`, x + 2, y + 4);
-			
-			return false;
-		}
-	}
-
-	/**
 	 * Enhanced card grid PDF generation (existing logic with minor improvements)
 	 * Handles traditional card displays with inclusion percentages
 	 */
@@ -716,8 +584,13 @@ class ExportManager {
 		}
 	}
 	
+	/**
+	 * Enhanced Upgrade Guide PDF Generation with Hybrid Rendering
+	 * Uses text rendering for content and image rendering for cards
+	 * Implements proper decklist text rendering with 3-column layout
+	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
-		console.log('📄 Starting Upgrade Guide PDF generation');
+		console.log('📄 Starting Enhanced Upgrade Guide PDF generation');
 		
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid || cardGrid.children.length === 0) {
@@ -733,16 +606,16 @@ class ExportManager {
 			// PDF dimensions
 			const pageWidth = 210;
 			const pageHeight = 297;
-			const margin = 8;
+			const margin = 15; // Increased margin for better readability
 			const availableWidth = pageWidth - (2 * margin);
 			
 			let currentY = margin;
 			let currentPage = 1;
 			const MAX_PAGES = 50;
 			
-			// Process all DOM elements in sequence
+			// Process all DOM elements in sequence with hybrid rendering
 			const children = Array.from(cardGrid.children);
-			console.log(`🔍 Processing ${children.length} elements for upgrade guide PDF`);
+			console.log(`🔍 Processing ${children.length} elements with hybrid rendering`);
 			
 			for (const element of children) {
 				if (currentPage > MAX_PAGES) {
@@ -750,32 +623,47 @@ class ExportManager {
 					break;
 				}
 				
-				// ROUTE ELEMENT TO APPROPRIATE RENDERER
-				if (this.isArticleElement(element)) {
-					// ARTICLE CONTENT: Continuous flow layout
-					currentY = await this.renderArticleElementToPDF(
-						pdf, element, margin, currentY, availableWidth, pageHeight
-					);
-				} else if (this.isCardGridElement(element)) {
-					// CARD GRID CONTENT: Grid layout (reuse existing logic)
-					currentY = await this.renderCardGridElementToPDF(
-						pdf, element, margin, currentY, availableWidth, pageHeight
-					);
-				} else {
-					// UNKNOWN ELEMENT: Default rendering
-					console.warn('⚠️ Unknown element type:', element.className);
-					currentY = await this.renderGenericElementToPDF(
-						pdf, element, margin, currentY, availableWidth, pageHeight
-					);
-				}
-				
-				// CHECK FOR PAGE BREAK
+				// Check for page break before rendering each element
 				if (currentY > pageHeight - margin && currentPage <= MAX_PAGES) {
 					pdf.addPage();
 					currentPage++;
 					currentY = margin;
 					console.log(`📄 Added new page (${currentPage})`);
 				}
+				
+				// HYBRID RENDERING ROUTING - CRITICAL IMPROVEMENT
+				if (element.classList.contains('guide-cardlist')) {
+					console.log('🎯 Routing to DECKLIST TEXT RENDERER');
+					// Render decklist as structured text with 3-column layout
+					currentY = await this.renderDecklistAsText(
+						pdf, element, margin, currentY, availableWidth, pageHeight
+					);
+					
+				} else if (element.classList.contains('card-frame')) {
+					console.log('🎯 Routing to CARD IMAGE RENDERER');
+					// Render individual card as image (existing logic)
+					const cardHeight = 45; // Standard card height
+					
+					// Check if card fits on current page
+					if (currentY + cardHeight > pageHeight - margin) {
+						pdf.addPage();
+						currentPage++;
+						currentY = margin;
+						if (currentPage > MAX_PAGES) break;
+					}
+					
+					// Use modified card rendering that excludes inclusion percentages for upgrade guides
+					await this.renderUpgradeCardToPDF(pdf, element, margin, currentY, availableWidth, cardHeight);
+					currentY += cardHeight + 5; // 5mm spacing after card
+					
+				} else {
+					console.log('🎯 Routing to TEXT RENDERER');
+					// Render text content (headers, paragraphs) as PDF text
+					currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
+				}
+				
+				// Add spacing between elements
+				currentY += 5;
 			}
 			
 			// Add final page numbers
@@ -784,7 +672,7 @@ class ExportManager {
 			// Save and complete
 			pdf.save(filename);
 			this.hidePDFLoading();
-			console.log('✅ Upgrade Guide PDF generation completed');
+			console.log('✅ Upgrade Guide PDF generation completed with hybrid rendering');
 			return true;
 			
 		} catch (error) {
@@ -794,195 +682,7 @@ class ExportManager {
 		}
 	}
 
-	// === NEW METHOD: ARTICLE ELEMENT DETECTION ===
-	/**
-	 * Identifies article content elements for continuous flow layout
-	 */
-	isArticleElement(element) {
-		const isArticle = element.classList.contains('upgrade-guide-header') ||
-						 element.classList.contains('guide-header') ||
-						 element.classList.contains('guide-paragraph-group') ||
-						 element.classList.contains('guide-paragraph') ||
-						 element.classList.contains('guide-cardlist');
-		
-		if (isArticle) {
-			console.log(`📝 Identified article element: ${element.className}`);
-		}
-		return isArticle;
-	}
-
-	// === NEW METHOD: CARD GRID ELEMENT DETECTION ===
-	/**
-	 * Identifies card grid elements for grid layout
-	 */
-	isCardGridElement(element) {
-		const isCardGrid = element.classList.contains('section-header') ||
-						  element.classList.contains('card-frame');
-		
-		if (isCardGrid) {
-			console.log(`🃏 Identified card grid element: ${element.className}`);
-		}
-		return isCardGrid;
-	}
-
-	// === NEW METHOD: ARTICLE ELEMENT RENDERING ===
-	/**
-	 * Renders article elements using continuous flow layout
-	 */
-	async renderArticleElementToPDF(pdf, element, x, y, width, maxY) {
-		console.log(`📝 Rendering article element at Y=${y}mm`);
-		
-		// Calculate element height based on content
-		const elementHeight = this.calculateArticleElementHeight(element, width);
-		
-		// Check if element fits on current page
-		if (y + elementHeight > maxY) {
-			throw new Error(`Article element too large for page: needs ${elementHeight}mm, has ${maxY - y}mm`);
-		}
-		
-		// Render element to PDF
-		await this.renderElementToPDF(pdf, element, x, y, width, elementHeight);
-		
-		// Return new Y position (current position + element height + gap)
-		const newY = y + elementHeight + 5;
-		console.log(`📝 Article element rendered, new Y position: ${newY}mm`);
-		return newY;
-	}
-
-	// === NEW METHOD: CARD GRID ELEMENT RENDERING ===
-	/**
-	 * Renders card grid elements using existing grid layout system
-	 */
-	async renderCardGridElementToPDF(pdf, element, startX, startY, availableWidth, pageHeight) {
-		console.log(`🃏 Rendering card grid element at Y=${startY}mm`);
-		
-		// For card grid elements, use existing commander list PDF logic
-		// This ensures consistent card rendering across all content types
-		
-		if (element.classList.contains('section-header')) {
-			// Section headers use simple text rendering
-			const headerHeight = 8;
-			this.addPrintSectionHeader(pdf, element.textContent, startX, startY, availableWidth, headerHeight);
-			return startY + headerHeight;
-		} else if (element.classList.contains('card-frame')) {
-			// Individual card frames use existing card rendering
-			const cardWidth = availableWidth / 4; // Standard 4-column grid
-			const cardHeight = 45; // Standard card height
-			
-			await this.addPrintCardToPDF(pdf, element, startX, startY, cardWidth, cardHeight);
-			return startY + cardHeight;
-		}
-		
-		// Fallback for unknown card grid elements
-		return startY + 30;
-	}
-
-	// === NEW METHOD: ARTICLE ELEMENT HEIGHT CALCULATION ===
-	/**
-	 * Estimates height for article elements in millimeters
-	 */
-	calculateArticleElementHeight(element, availableWidth) {
-		const classList = element.classList;
-		
-		if (classList.contains('upgrade-guide-header')) {
-			return 25; // Title + metadata
-		} else if (classList.contains('guide-header')) {
-			return 12; // Section headers
-		} else if (classList.contains('guide-paragraph-group') || 
-				   classList.contains('guide-paragraph')) {
-			const text = element.textContent || '';
-			const approxLines = Math.ceil(text.length / 100); // Rough estimate
-			return Math.max(20, approxLines * 4); // 4mm per line
-		} else if (classList.contains('guide-cardlist')) {
-			const listItems = element.querySelectorAll('li');
-			return 15 + (listItems.length * 3); // 3mm per list item
-		}
-		
-		// Default height for unknown article elements
-		return 30;
-	}
-
-	// === NEW METHOD: GENERIC ELEMENT RENDERING ===
-	/**
-	 * Fallback renderer for unknown element types
-	 */
-	async renderGenericElementToPDF(pdf, element, x, y, width, maxY) {
-		console.warn(`⚠️ Using generic renderer for: ${element.className}`);
-		
-		const defaultHeight = 30;
-		if (y + defaultHeight > maxY) {
-			throw new Error('Generic element too large for page');
-		}
-		
-		await this.renderElementToPDF(pdf, element, x, y, width, defaultHeight);
-		return y + defaultHeight + 5;
-	}
-
-	// === NEW METHOD: UNIVERSAL ELEMENT RENDERER ===
-	/**
-	 * Renders any DOM element to PDF using html2canvas
-	 * Applies PDF-optimized styling
-	 */
-	async renderElementToPDF(pdf, element, x, y, width, height) {
-		try {
-			const canvas = await html2canvas(element, {
-				scale: 1.5,
-				useCORS: true,
-				allowTaint: true,
-				backgroundColor: '#ffffff',
-				onclone: function(clonedDoc, element) {
-					// APPLY PDF-OPTIMIZED STYLING TO ALL ELEMENTS
-					const allElements = element.querySelectorAll('*');
-					allElements.forEach(el => {
-						el.style.color = '#000000';
-						el.style.backgroundColor = '#ffffff';
-						el.style.boxShadow = 'none';
-						if (el.style.opacity) el.style.opacity = '1';
-					});
-					
-					// ENHANCE SYMBOLS FOR PDF
-					const symbolElements = element.querySelectorAll('.set-symbol-stats');
-					symbolElements.forEach(symbol => {
-						symbol.style.transform = 'scale(1.4)';
-						symbol.style.transformOrigin = 'center center';
-					});
-					
-					// ENSURE TEXT READABILITY
-					const textElements = element.querySelectorAll('p, span, div, li');
-					textElements.forEach(textEl => {
-						textEl.style.color = '#000000';
-					});
-				}
-			});
-
-			const imgData = canvas.toDataURL('image/png');
-			pdf.addImage(imgData, 'PNG', x, y, width, height);
-			
-			// Add subtle border for visual separation
-			pdf.setDrawColor(200, 200, 200);
-			pdf.setLineWidth(0.1);
-			pdf.rect(x, y, width, height, 'D');
-			
-			return true;
-			
-		} catch (error) {
-			console.error('Element render failed:', error);
-			
-			// Fallback: Draw bounding box
-			pdf.setFillColor(255, 255, 255);
-			pdf.setDrawColor(136, 136, 136);
-			pdf.setLineWidth(0.3);
-			pdf.rect(x, y, width, height, 'FD');
-			
-			pdf.setTextColor(0, 0, 0);
-			pdf.setFontSize(6);
-			pdf.text(`[${element.className}]`, x + 2, y + 4);
-			
-			return false;
-		}
-	}
-
-	// === NEW METHOD: PAGE NUMBERING ===
+	// === PAGE NUMBERING ===
 	/**
 	 * Adds consistent page numbering to PDF document
 	 */
@@ -997,6 +697,384 @@ class ExportManager {
 		}
 	}
 	
+	// =============================================================================
+	// DECKLIST TEXT RENDERING FOR UPGRADE GUIDES
+	// =============================================================================
+
+	/**
+	 * Parse decklist DOM element into structured data for PDF rendering
+	 * Extracts title, section headers, and card lists from the nested DOM structure
+	 * @param {Element} element - DOM element with class 'guide-cardlist'
+	 * @returns {Object} Structured decklist data with title and sections
+	 */
+	parseDecklistStructure(element) {
+		console.log('🔍 Parsing decklist structure from DOM');
+		
+		const decklist = {
+			title: '',
+			sections: []
+		};
+		
+		try {
+			// Extract decklist title (h4 element)
+			const titleElement = element.querySelector('h4');
+			if (titleElement) {
+				decklist.title = titleElement.textContent.trim();
+				console.log(`📋 Decklist title: ${decklist.title}`);
+			}
+			
+			// Extract all sections from the decklist-section container
+			const sectionElements = element.querySelectorAll('.decklist-section > div');
+			console.log(`📋 Found ${sectionElements.length} sections in decklist`);
+			
+			sectionElements.forEach((sectionEl, index) => {
+				const section = {
+					header: '',
+					cards: []
+				};
+				
+				// Extract section header (h5 element)
+				const headerElement = sectionEl.querySelector('h5');
+				if (headerElement) {
+					section.header = headerElement.textContent.trim();
+				} else {
+					section.header = `Section ${index + 1}`;
+				}
+				
+				// Extract card list items
+				const cardElements = sectionEl.querySelectorAll('li');
+				cardElements.forEach(cardEl => {
+					const cardText = cardEl.textContent.trim();
+					if (cardText) {
+						section.cards.push(cardText);
+					}
+				});
+				
+				console.log(`📋 Section "${section.header}": ${section.cards.length} cards`);
+				decklist.sections.push(section);
+			});
+			
+		} catch (error) {
+			console.error('❌ Error parsing decklist structure:', error);
+		}
+		
+		return decklist;
+	}
+
+	/**
+	 * Calculate approximate heights for each section in millimeters
+	 * Used for column distribution and layout planning
+	 * @param {Array} sections - Decklist sections from parseDecklistStructure
+	 * @returns {Array} Sections with calculated height properties
+	 */
+	calculateSectionHeights(sections) {
+		const sectionsWithHeights = [];
+		
+		// PDF layout constants (in millimeters)
+		const HEADER_HEIGHT = 6; // 10pt header with spacing
+		const CARD_HEIGHT = 3.5; // 9pt card text with line spacing
+		const SECTION_SPACING = 3; // Space between sections
+		
+		sections.forEach(section => {
+			// Calculate total height: header + cards + spacing
+			const cardsHeight = section.cards.length * CARD_HEIGHT;
+			const totalHeight = HEADER_HEIGHT + cardsHeight + SECTION_SPACING;
+			
+			sectionsWithHeights.push({
+				...section,
+				height: totalHeight,
+				headerHeight: HEADER_HEIGHT,
+				cardHeight: CARD_HEIGHT
+			});
+			
+			console.log(`📏 Section "${section.header}": ${totalHeight.toFixed(1)}mm (${section.cards.length} cards)`);
+		});
+		
+		return sectionsWithHeights;
+	}
+
+	/**
+	 * Distribute sections across 3 columns using sequential filling
+	 * Fills column 1 completely before moving to column 2, then column 3
+	 * Ensures sections are never split across columns
+	 * @param {Array} sections - Sections with calculated heights
+	 * @param {number} availableHeight - Maximum height per column in mm
+	 * @returns {Array} 3-column array with distributed sections
+	 */
+	distributeSectionsToColumns(sections, availableHeight) {
+		const columns = [[], [], []];
+		let currentColumn = 0;
+		let currentHeight = 0;
+		
+		console.log(`📊 Distributing ${sections.length} sections across 3 columns (max ${availableHeight}mm per column)`);
+		
+		for (const section of sections) {
+			const sectionHeight = section.height;
+			
+			// Check if section fits in current column
+			// If not and we have more columns available, move to next column
+			if (currentHeight + sectionHeight > availableHeight && currentColumn < 2) {
+				console.log(`↪️ Column ${currentColumn + 1} full (${currentHeight.toFixed(1)}mm), moving to column ${currentColumn + 2}`);
+				currentColumn++;
+				currentHeight = 0;
+			}
+			
+			// Add section to current column
+			columns[currentColumn].push(section);
+			currentHeight += sectionHeight;
+			
+			console.log(`📦 Added "${section.header}" to column ${currentColumn + 1}, height: ${currentHeight.toFixed(1)}mm`);
+		}
+		
+		// Log distribution results
+		columns.forEach((colSections, index) => {
+			const colHeight = colSections.reduce((sum, section) => sum + section.height, 0);
+			console.log(`✅ Column ${index + 1}: ${colSections.length} sections, ${colHeight.toFixed(1)}mm total`);
+		});
+		
+		return columns;
+	}
+
+	/**
+	 * Render decklist as PDF text with proper 3-column layout
+	 * Uses jsPDF native text methods for clean, scalable text rendering
+	 * @param {jsPDF} pdf - PDF document instance
+	 * @param {Element} element - Decklist DOM element
+	 * @param {number} startX - Starting X position in mm
+	 * @param {number} startY - Starting Y position in mm
+	 * @param {number} availableWidth - Total width available in mm
+	 * @param {number} pageHeight - Page height for overflow calculations
+	 * @returns {number} New Y position after rendering complete decklist
+	 */
+	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
+		console.log('🎨 Rendering decklist as PDF text');
+		
+		// Parse decklist structure from DOM
+		const decklistData = this.parseDecklistStructure(element);
+		if (!decklistData.sections || decklistData.sections.length === 0) {
+			console.warn('⚠️ No decklist sections found, skipping rendering');
+			return startY;
+		}
+		
+		// Calculate section heights for layout planning
+		const sectionsWithHeights = this.calculateSectionHeights(decklistData.sections);
+		
+		// Calculate available height for columns (leave margin at bottom)
+		const availableHeight = pageHeight - startY - 15; // 15mm bottom margin
+		
+		// Distribute sections across 3 columns
+		const columns = this.distributeSectionsToColumns(sectionsWithHeights, availableHeight);
+		
+		// Calculate column dimensions
+		const columnWidth = (availableWidth - 10) / 3; // 10mm total gutter space
+		const columnGutter = 5; // 5mm between columns
+		
+		let currentY = startY;
+		
+		// Render decklist title (centered above columns)
+		if (decklistData.title) {
+			pdf.setFontSize(11);
+			pdf.setFont(undefined, 'bold');
+			pdf.text(decklistData.title, startX + availableWidth / 2, currentY, { align: 'center' });
+			currentY += 8; // Space after title
+		}
+		
+		// Render each column
+		columns.forEach((columnSections, columnIndex) => {
+			if (columnSections.length === 0) return;
+			
+			const columnX = startX + (columnIndex * (columnWidth + columnGutter));
+			let columnY = currentY;
+			
+			console.log(`🖋️ Rendering column ${columnIndex + 1} at X:${columnX}mm, Y:${columnY}mm`);
+			
+			// Render each section in this column
+			columnSections.forEach(section => {
+				// Render section header
+				pdf.setFontSize(10);
+				pdf.setFont(undefined, 'bold');
+				pdf.text(section.header, columnX, columnY);
+				columnY += section.headerHeight;
+				
+				// Render card list
+				pdf.setFontSize(9);
+				pdf.setFont(undefined, 'normal');
+				
+				section.cards.forEach(cardText => {
+					// Ensure card text fits in column width
+					const maxTextWidth = columnWidth - 2; // 2mm padding
+					const lines = pdf.splitTextToSize(cardText, maxTextWidth);
+					
+					lines.forEach(line => {
+						pdf.text(line, columnX, columnY);
+						columnY += section.cardHeight;
+					});
+				});
+				
+				// Add spacing after section
+				columnY += 2;
+			});
+			
+			console.log(`✅ Column ${columnIndex + 1} rendered, final Y: ${columnY}mm`);
+		});
+		
+		// Return the maximum Y position from all columns
+		const finalY = currentY + Math.max(...columns.map((col, index) => {
+			const colHeight = col.reduce((sum, section) => sum + section.height, 0);
+			return colHeight;
+		}));
+		
+		console.log(`🎉 Decklist rendering complete, new Y position: ${finalY}mm`);
+		return finalY;
+	}
+
+	/**
+	 * Render text content elements as PDF text (headers, paragraphs)
+	 * Uses jsPDF native text methods for clean, scalable rendering
+	 * @param {jsPDF} pdf - PDF document instance
+	 * @param {Element} element - Text DOM element
+	 * @param {number} x - X position in mm
+	 * @param {number} y - Y position in mm
+	 * @param {number} width - Available width in mm
+	 * @returns {number} New Y position after rendering
+	 */
+	renderTextElement(pdf, element, x, y, width) {
+		console.log(`📝 Rendering text element: ${element.className}`);
+		
+		const text = element.textContent.trim();
+		if (!text) return y;
+		
+		// Determine font size and style based on element class
+		let fontSize = 10;
+		let isBold = false;
+		
+		if (element.classList.contains('guide-title') || 
+			element.classList.contains('guide-header')) {
+			fontSize = 11;
+			isBold = true;
+		} else if (element.classList.contains('section-header')) {
+			fontSize = 12;
+			isBold = true;
+		} else {
+			fontSize = 10; // Regular paragraphs
+			isBold = false;
+		}
+		
+		// Apply font settings
+		pdf.setFontSize(fontSize);
+		pdf.setFont(undefined, isBold ? 'bold' : 'normal');
+		
+		// Split text into lines that fit available width
+		const maxTextWidth = width - 4; // 4mm padding
+		const lines = pdf.splitTextToSize(text, maxTextWidth);
+		
+		// Calculate total height needed
+		const lineHeight = fontSize * 0.35; // Convert pt to mm (approximate)
+		const totalHeight = lines.length * lineHeight;
+		
+		// Render each line
+		lines.forEach((line, index) => {
+			pdf.text(line, x + 2, y + (index * lineHeight) + lineHeight);
+		});
+		
+		// Return new Y position
+		const newY = y + totalHeight + 4; // 4mm spacing after element
+		console.log(`📝 Text rendered, ${lines.length} lines, new Y: ${newY}mm`);
+		return newY;
+	}
+	/**
+	 * Enhanced card rendering for upgrade guides - excludes inclusion percentages
+	 * Uses existing card rendering logic but removes inclusion data for cleaner display
+	 * @param {jsPDF} pdf - PDF document instance
+	 * @param {Element} cardElement - Card frame DOM element
+	 * @param {number} x - X position
+	 * @param {number} y - Y position
+	 * @param {number} width - Card width
+	 * @param {number} height - Card height
+	 */
+	async renderUpgradeCardToPDF(pdf, cardElement, x, y, width, height) {
+		console.log('🃏 Rendering upgrade card (without inclusion percentage)');
+		
+		// Create a clone of the card element to modify for PDF rendering
+		const clonedCard = cardElement.cloneNode(true);
+		
+		// Remove inclusion percentage element if present
+		const inclusionElement = clonedCard.querySelector('.inclusion-percentage');
+		if (inclusionElement) {
+			inclusionElement.remove();
+			console.log('✅ Removed inclusion percentage from upgrade card');
+		}
+		
+		try {
+			const canvas = await html2canvas(clonedCard, {
+				scale: 1.5,
+				useCORS: true,
+				allowTaint: true,
+				backgroundColor: '#ffffff',
+				onclone: function(clonedDoc, element) {
+					// Apply PDF-optimized styling (same as original)
+					const allElements = element.querySelectorAll('*');
+					allElements.forEach(el => {
+						el.style.color = '#000000';
+						el.style.backgroundColor = '#ffffff';
+						el.style.boxShadow = 'none';
+						if (el.style.opacity) el.style.opacity = '1';
+					});
+					
+					// Enhance symbols for PDF
+					const symbolElements = element.querySelectorAll('.set-symbol-stats');
+					symbolElements.forEach(symbol => {
+						symbol.style.transform = 'scale(1.4)';
+						symbol.style.transformOrigin = 'center center';
+					});
+					
+					// Style back indicators for double-faced cards
+					const backIndicators = element.querySelectorAll('.back-indicator');
+					backIndicators.forEach(indicator => {
+						indicator.style.cssText = `
+							color: white !important;
+							background-color: #444 !important;
+							border: 2px solid #444 !important;
+							font-weight: bold !important;
+							padding: 4px 8px !important;
+							border-radius: 6px !important;
+							font-size: 0.9em !important;
+							text-align: center !important;
+							display: inline-block !important;
+							margin: 3px 0 3px 0 !important;
+							min-width: 80px !important;
+							line-height: 1.2 !important;
+						`;
+					});
+				}
+			});
+
+			const imgData = canvas.toDataURL('image/png');
+			pdf.addImage(imgData, 'PNG', x, y, width, height);
+			
+			// Add subtle border
+			pdf.setDrawColor(136, 136, 136);
+			pdf.setLineWidth(0.3);
+			pdf.rect(x, y, width, height, 'D');
+			
+			console.log('✅ Upgrade card rendered successfully');
+			
+		} catch (error) {
+			console.error('❌ Upgrade card render failed:', error);
+			
+			// Fallback rendering
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(136, 136, 136);
+			pdf.setLineWidth(0.3);
+			pdf.rect(x, y, width, height, 'FD');
+			
+			pdf.setTextColor(0, 0, 0);
+			pdf.setFontSize(7);
+			const cardName = clonedCard.querySelector('.card-name')?.textContent || 'Unknown Card';
+			const text = cardName.substring(0, 30);
+			pdf.text(text, x + 2, y + 8);
+		}
+	}
 }
 
 window.ExportManager = ExportManager;
