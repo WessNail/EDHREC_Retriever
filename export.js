@@ -644,6 +644,18 @@ class ExportManager {
 							pdf, element, margin, currentY, availableWidth, pageHeight
 						);
 						
+					} else if (element.classList.contains('card-grid')) {
+						console.log('🎯 Routing to UPGRADE CARD GRID RENDERER');
+						
+						// Extract all card frames from the grid container
+						const cardFrames = Array.from(element.querySelectorAll('.card-frame'));
+						console.log(`🃏 Found ${cardFrames.length} card frames in grid`);
+						
+						// Use card grid renderer with upgrade guide flag
+						currentY = await this.renderCardGridSection(
+							pdf, cardFrames, margin, currentY, availableWidth, pageHeight, true // isUpgradeGuide = true
+						);
+						
 					} else if (element.classList.contains('card-frame')) {
 						console.log('🎯 Routing to COMMANDER-STYLE CARD GRID');
 						
@@ -1088,8 +1100,8 @@ class ExportManager {
 	 * Render card grid section using existing commander list PDF logic
 	 * Reuses the proven card rendering system for consistent quality
 	 */
-	async renderCardGridSection(pdf, cardFrames, startX, startY, availableWidth, pageHeight) {
-		console.log(`🃏 Rendering ${cardFrames.length} cards using commander list system`);
+	async renderCardGridSection(pdf, cardFrames, startX, startY, availableWidth, pageHeight, isUpgradeGuide = false) {
+		console.log(`🃏 Rendering ${cardFrames.length} cards using ${isUpgradeGuide ? 'UPGRADE' : 'commander'} list system`);
 		
 		const cardsPerRow = 4;
 		const cardsPerColumn = 6;
@@ -1126,8 +1138,12 @@ class ExportManager {
 			
 			const cardX = startX + (currentCol * cardWidth);
 			
-			// USE EXISTING CARD RENDERER - PROVEN TO WORK
-			await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+			// USE THE APPROPRIATE CARD RENDERER
+			if (isUpgradeGuide) {
+				await this.renderUpgradeCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+			} else {
+				await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+			}
 			
 			currentCol++;
 		}
