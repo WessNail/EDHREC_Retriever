@@ -590,7 +590,7 @@ class ExportManager {
 	 * Implements proper decklist text rendering with 3-column layout
 	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
-		console.log('📄 Starting Enhanced Upgrade Guide PDF generation');
+		console.log('📄 Starting Fixed Upgrade Guide PDF generation');
 		
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid || cardGrid.children.length === 0) {
@@ -606,64 +606,72 @@ class ExportManager {
 			// PDF dimensions
 			const pageWidth = 210;
 			const pageHeight = 297;
-			const margin = 15; // Increased margin for better readability
+			const margin = 15;
 			const availableWidth = pageWidth - (2 * margin);
 			
 			let currentY = margin;
 			let currentPage = 1;
 			const MAX_PAGES = 50;
 			
-			// Process all DOM elements in sequence with hybrid rendering
+			// Get all elements and group them by header-content relationships
 			const children = Array.from(cardGrid.children);
-			console.log(`🔍 Processing ${children.length} elements with hybrid rendering`);
+			const contentGroups = this.groupContentWithHeaders(children);
 			
-			for (const element of children) {
-				if (currentPage > MAX_PAGES) {
-					console.log('📄 Reached maximum page limit');
-					break;
-				}
+			console.log(`🔍 Processing ${contentGroups.length} content groups with header grouping`);
+			
+			// Process each content group (header + its content)
+			for (const group of contentGroups) {
+				if (currentPage > MAX_PAGES) break;
 				
-				// Check for page break before rendering each element
-				if (currentY > pageHeight - margin && currentPage <= MAX_PAGES) {
+				// Calculate group height to check if it fits on current page
+				const groupHeight = this.estimateGroupHeight(group, availableWidth, pageHeight);
+				
+				// If group doesn't fit, start new page
+				if (currentY + groupHeight > pageHeight - margin && currentPage <= MAX_PAGES) {
 					pdf.addPage();
 					currentPage++;
 					currentY = margin;
-					console.log(`📄 Added new page (${currentPage})`);
+					console.log(`📄 Added new page for content group (${currentPage})`);
 				}
 				
-				// HYBRID RENDERING ROUTING - CRITICAL IMPROVEMENT
-				if (element.classList.contains('guide-cardlist')) {
-					console.log('🎯 Routing to DECKLIST TEXT RENDERER');
-					// Render decklist as structured text with 3-column layout
-					currentY = await this.renderDecklistAsText(
-						pdf, element, margin, currentY, availableWidth, pageHeight
-					);
-					
-				} else if (element.classList.contains('card-frame')) {
-					console.log('🎯 Routing to CARD IMAGE RENDERER');
-					// Render individual card as image (existing logic)
-					const cardHeight = 45; // Standard card height
-					
-					// Check if card fits on current page
-					if (currentY + cardHeight > pageHeight - margin) {
-						pdf.addPage();
-						currentPage++;
-						currentY = margin;
-						if (currentPage > MAX_PAGES) break;
+				// Render each element in the group
+				for (const element of group) {
+					// HYBRID RENDERING ROUTING
+					if (element.classList.contains('guide-cardlist')) {
+						console.log('🎯 Routing to DECKLIST TEXT RENDERER');
+						// Render decklist as structured text with 3-column layout
+						currentY = await this.renderDecklistAsText(
+							pdf, element, margin, currentY, availableWidth, pageHeight
+						);
+						
+					} else if (element.classList.contains('card-frame')) {
+						console.log('🎯 Routing to COMMANDER-STYLE CARD GRID');
+						
+						// Collect all consecutive card frames
+						const remainingElements = group.slice(group.indexOf(element));
+						const cardFrames = remainingElements.filter(el => 
+							el.classList.contains('card-frame')
+						);
+						
+						if (cardFrames.length > 0) {
+							// Use proven commander list rendering
+							currentY = await this.renderCardGridSection(
+								pdf, cardFrames, margin, currentY, availableWidth, pageHeight
+							);
+							
+							// Skip processed card frames
+							break;
+						}
+						
+					} else {
+						console.log('🎯 Routing to TEXT RENDERER');
+						// Render text content as PDF text
+						currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
 					}
 					
-					// Use modified card rendering that excludes inclusion percentages for upgrade guides
-					await this.renderUpgradeCardToPDF(pdf, element, margin, currentY, availableWidth, cardHeight);
-					currentY += cardHeight + 5; // 5mm spacing after card
-					
-				} else {
-					console.log('🎯 Routing to TEXT RENDERER');
-					// Render text content (headers, paragraphs) as PDF text
-					currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
+					// Add spacing between elements
+					currentY += 5;
 				}
-				
-				// Add spacing between elements
-				currentY += 5;
 			}
 			
 			// Add final page numbers
@@ -672,7 +680,7 @@ class ExportManager {
 			// Save and complete
 			pdf.save(filename);
 			this.hidePDFLoading();
-			console.log('✅ Upgrade Guide PDF generation completed with hybrid rendering');
+			console.log('✅ Upgrade Guide PDF generation completed with fixes');
 			return true;
 			
 		} catch (error) {
@@ -1074,6 +1082,164 @@ class ExportManager {
 			const text = cardName.substring(0, 30);
 			pdf.text(text, x + 2, y + 8);
 		}
+	}
+	
+	/**
+	 * Render card grid section using existing commander list PDF logic
+	 * Reuses the proven card rendering system for consistent quality
+	 */
+	async renderCardGridSection(pdf, cardFrames, startX, startY, availableWidth, pageHeight) {
+		console.log(`🃏 Rendering ${cardFrames.length} cards using commander list system`);
+		
+		const cardsPerRow = 4;
+		const cardsPerColumn = 6;
+		const sectionHeaderHeight = 8;
+		
+		const cardWidth = availableWidth / cardsPerRow;
+		const cardHeight = (pageHeight - (2 * 15)) / cardsPerColumn; // 15mm margins
+		
+		let currentY = startY;
+		let currentCol = 0;
+		
+		// Check if we need a new page for this card section
+		if (currentY + cardHeight > pageHeight - 15) {
+			pdf.addPage();
+			currentY = 15;
+		}
+		
+		// Render cards in grid layout (same as commander lists)
+		for (let i = 0; i < cardFrames.length; i++) {
+			const card = cardFrames[i];
+			
+			// Check if we need new row
+			if (currentCol >= cardsPerRow) {
+				currentCol = 0;
+				currentY += cardHeight;
+			}
+			
+			// Check if card fits on current page
+			if (currentY + cardHeight > pageHeight - 15) {
+				pdf.addPage();
+				currentY = 15;
+				currentCol = 0;
+			}
+			
+			const cardX = startX + (currentCol * cardWidth);
+			
+			// USE EXISTING CARD RENDERER - PROVEN TO WORK
+			await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+			
+			currentCol++;
+		}
+		
+		// Move to next row after section
+		if (currentCol !== 0) {
+			currentY += cardHeight;
+		}
+		
+		return currentY;
+	}
+		
+	/**
+	 * Group elements by header-content relationships to prevent page breaks
+	 * Ensures headers stay with their following content blocks
+	 * @param {Array} elements - DOM elements from cardGrid
+	 * @returns {Array} Grouped elements where headers are with their content
+	 */
+	groupContentWithHeaders(elements) {
+		console.log('📋 Grouping elements by header-content relationships');
+		
+		const groups = [];
+		let currentGroup = [];
+		
+		for (const element of elements) {
+			const isHeader = element.classList.contains('guide-header') || 
+							element.classList.contains('section-header') ||
+							element.tagName?.match(/^H[1-6]$/);
+			
+			if (isHeader && currentGroup.length > 0) {
+				// Start new group when we encounter a header (and we already have a group)
+				console.log(`📦 Creating new group with ${currentGroup.length} elements`);
+				groups.push(currentGroup);
+				currentGroup = [element];
+			} else {
+				// Add to current group
+				currentGroup.push(element);
+			}
+		}
+		
+		// Don't forget the last group
+		if (currentGroup.length > 0) {
+			console.log(`📦 Final group with ${currentGroup.length} elements`);
+			groups.push(currentGroup);
+		}
+		
+		console.log(`✅ Created ${groups.length} content groups`);
+		return groups;
+	}
+
+	/**
+	 * Estimate total height of a content group to prevent page breaks within groups
+	 * Uses conservative estimates to ensure groups stay together
+	 * @param {Array} group - Group of DOM elements
+	 * @param {number} availableWidth - Available width in mm
+	 * @param {number} pageHeight - Page height in mm
+	 * @returns {number} Estimated total height in mm
+	 */
+	estimateGroupHeight(group, availableWidth, pageHeight) {
+		let totalHeight = 0;
+		
+		console.log(`📏 Estimating height for group with ${group.length} elements`);
+		
+		for (const element of group) {
+			if (element.classList.contains('guide-cardlist')) {
+				// Estimate decklist height using our precise calculation
+				try {
+					const decklistData = this.parseDecklistStructure(element);
+					if (decklistData.sections && decklistData.sections.length > 0) {
+						const sectionsWithHeights = this.calculateSectionHeights(decklistData.sections);
+						const decklistHeight = sectionsWithHeights.reduce((sum, section) => sum + section.height, 0);
+						totalHeight += decklistHeight + 15; // Add title and spacing
+						console.log(`📏 Decklist estimated: ${decklistHeight}mm`);
+					}
+				} catch (error) {
+					// Fallback estimate
+					totalHeight += 80;
+				}
+			} else if (element.classList.contains('card-frame')) {
+				// Card grid section - count all consecutive card frames in group
+				const cardIndex = group.indexOf(element);
+				const remainingElements = group.slice(cardIndex);
+				const cardFrames = remainingElements.filter(el => el.classList.contains('card-frame'));
+				
+				if (cardFrames.length > 0) {
+					const cardsPerRow = 4;
+					const cardHeight = 45; // Standard card height
+					const rows = Math.ceil(cardFrames.length / cardsPerRow);
+					const cardSectionHeight = rows * cardHeight + 10; // 10mm for spacing
+					totalHeight += cardSectionHeight;
+					console.log(`📏 Card grid estimated: ${cardSectionHeight}mm for ${cardFrames.length} cards`);
+					break; // Don't count individual card frames multiple times
+				}
+			} else if (element.classList.contains('upgrade-guide-header')) {
+				// Guide header - fixed height
+				totalHeight += 30;
+			} else if (element.classList.contains('guide-header') || element.classList.contains('section-header')) {
+				// Headers - fixed height with spacing
+				totalHeight += 15;
+			} else {
+				// Text content - estimate based on text length
+				const text = element.textContent || '';
+				const approxLines = Math.ceil(text.length / 80); // Rough chars per line
+				totalHeight += Math.max(20, approxLines * 5); // 5mm per line
+			}
+			
+			// Add spacing between elements
+			totalHeight += 5;
+		}
+		
+		console.log(`📏 Total group height: ${totalHeight}mm`);
+		return totalHeight;
 	}
 }
 
