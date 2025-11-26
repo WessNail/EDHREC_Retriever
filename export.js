@@ -460,53 +460,7 @@ class ExportManager {
 				item.element.style.display = item.originalDisplay || '';
 			}
 		});
-	}
-	
-	/**
-	 * Generate PDF for upgrade guide content (articles, paragraphs, decklists)
-	 * Uses different layout logic than card grids
-	 */
-	async generateUpgradeGuidePDF(pdf, pageWidth, pageHeight, margin) {
-		console.log('📄 Generating Upgrade Guide PDF');
-		
-		const cardGrid = document.getElementById('cardGrid');
-		if (!cardGrid) throw new Error('Card grid element not found');
-
-		const availableWidth = pageWidth - (2 * margin);
-		let currentY = margin;
-		let currentPage = 1;
-		const MAX_PAGES = 50;
-
-		// Process all child elements in order
-		const children = Array.from(cardGrid.children);
-		
-		for (const element of children) {
-			if (currentPage > MAX_PAGES) {
-				console.log('PDF Layout: Reached maximum page limit');
-				break;
-			}
-			
-			// Estimate how much space this element needs
-			const elementHeight = this.estimateUpgradeElementHeight(element, availableWidth);
-			
-			// Check if we need a new page
-			if (currentY + elementHeight > (pageHeight - margin)) {
-				pdf.addPage();
-				currentPage++;
-				currentY = margin;
-				if (currentPage > MAX_PAGES) break;
-			}
-			
-			// Render the element to PDF
-			await this.renderUpgradeElementToPDF(pdf, element, margin, currentY, availableWidth, elementHeight);
-			
-			// Move Y position for next element
-			currentY += elementHeight + 5; // 5mm gap between elements
-		}
-
-		// Add page numbers to all pages
-		this.addPageNumbersToPDF(pdf, pageWidth, pageHeight);
-	}
+	}	
 
 	/**
 	 * Estimate height for upgrade guide elements in millimeters
@@ -750,6 +704,287 @@ class ExportManager {
 
 	/**
 	 * Add consistent page numbering to all pages in PDF
+	 */
+	addPageNumbersToPDF(pdf, pageWidth, pageHeight) {
+		const totalPages = pdf.internal.getNumberOfPages();
+		
+		for (let i = 1; i <= totalPages; i++) {
+			pdf.setPage(i);
+			pdf.setFontSize(8);
+			pdf.setTextColor(100, 100, 100);
+			pdf.text(`Page ${i} of ${totalPages}`, pageWidth - 25, pageHeight - 5);
+		}
+	}
+	
+	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
+		console.log('📄 Starting Upgrade Guide PDF generation');
+		
+		const cardGrid = document.getElementById('cardGrid');
+		if (!cardGrid || cardGrid.children.length === 0) {
+			throw new Error('No upgrade guide content available for PDF generation');
+		}
+
+		this.showPDFLoading();
+		
+		try {
+			const { jsPDF } = this.pdfjs;
+			const pdf = new jsPDF('p', 'mm', 'a4');
+			
+			// PDF dimensions
+			const pageWidth = 210;
+			const pageHeight = 297;
+			const margin = 8;
+			const availableWidth = pageWidth - (2 * margin);
+			
+			let currentY = margin;
+			let currentPage = 1;
+			const MAX_PAGES = 50;
+			
+			// Process all DOM elements in sequence
+			const children = Array.from(cardGrid.children);
+			console.log(`🔍 Processing ${children.length} elements for upgrade guide PDF`);
+			
+			for (const element of children) {
+				if (currentPage > MAX_PAGES) {
+					console.log('📄 Reached maximum page limit');
+					break;
+				}
+				
+				// ROUTE ELEMENT TO APPROPRIATE RENDERER
+				if (this.isArticleElement(element)) {
+					// ARTICLE CONTENT: Continuous flow layout
+					currentY = await this.renderArticleElementToPDF(
+						pdf, element, margin, currentY, availableWidth, pageHeight
+					);
+				} else if (this.isCardGridElement(element)) {
+					// CARD GRID CONTENT: Grid layout (reuse existing logic)
+					currentY = await this.renderCardGridElementToPDF(
+						pdf, element, margin, currentY, availableWidth, pageHeight
+					);
+				} else {
+					// UNKNOWN ELEMENT: Default rendering
+					console.warn('⚠️ Unknown element type:', element.className);
+					currentY = await this.renderGenericElementToPDF(
+						pdf, element, margin, currentY, availableWidth, pageHeight
+					);
+				}
+				
+				// CHECK FOR PAGE BREAK
+				if (currentY > pageHeight - margin && currentPage <= MAX_PAGES) {
+					pdf.addPage();
+					currentPage++;
+					currentY = margin;
+					console.log(`📄 Added new page (${currentPage})`);
+				}
+			}
+			
+			// Add final page numbers
+			this.addPageNumbersToPDF(pdf, pageWidth, pageHeight);
+			
+			// Save and complete
+			pdf.save(filename);
+			this.hidePDFLoading();
+			console.log('✅ Upgrade Guide PDF generation completed');
+			return true;
+			
+		} catch (error) {
+			this.hidePDFLoading();
+			console.error('❌ Upgrade Guide PDF generation failed:', error);
+			throw error;
+		}
+	}
+
+	// === NEW METHOD: ARTICLE ELEMENT DETECTION ===
+	/**
+	 * Identifies article content elements for continuous flow layout
+	 */
+	isArticleElement(element) {
+		const isArticle = element.classList.contains('upgrade-guide-header') ||
+						 element.classList.contains('guide-header') ||
+						 element.classList.contains('guide-paragraph-group') ||
+						 element.classList.contains('guide-paragraph') ||
+						 element.classList.contains('guide-cardlist');
+		
+		if (isArticle) {
+			console.log(`📝 Identified article element: ${element.className}`);
+		}
+		return isArticle;
+	}
+
+	// === NEW METHOD: CARD GRID ELEMENT DETECTION ===
+	/**
+	 * Identifies card grid elements for grid layout
+	 */
+	isCardGridElement(element) {
+		const isCardGrid = element.classList.contains('section-header') ||
+						  element.classList.contains('card-frame');
+		
+		if (isCardGrid) {
+			console.log(`🃏 Identified card grid element: ${element.className}`);
+		}
+		return isCardGrid;
+	}
+
+	// === NEW METHOD: ARTICLE ELEMENT RENDERING ===
+	/**
+	 * Renders article elements using continuous flow layout
+	 */
+	async renderArticleElementToPDF(pdf, element, x, y, width, maxY) {
+		console.log(`📝 Rendering article element at Y=${y}mm`);
+		
+		// Calculate element height based on content
+		const elementHeight = this.calculateArticleElementHeight(element, width);
+		
+		// Check if element fits on current page
+		if (y + elementHeight > maxY) {
+			throw new Error(`Article element too large for page: needs ${elementHeight}mm, has ${maxY - y}mm`);
+		}
+		
+		// Render element to PDF
+		await this.renderElementToPDF(pdf, element, x, y, width, elementHeight);
+		
+		// Return new Y position (current position + element height + gap)
+		const newY = y + elementHeight + 5;
+		console.log(`📝 Article element rendered, new Y position: ${newY}mm`);
+		return newY;
+	}
+
+	// === NEW METHOD: CARD GRID ELEMENT RENDERING ===
+	/**
+	 * Renders card grid elements using existing grid layout system
+	 */
+	async renderCardGridElementToPDF(pdf, element, startX, startY, availableWidth, pageHeight) {
+		console.log(`🃏 Rendering card grid element at Y=${startY}mm`);
+		
+		// For card grid elements, use existing commander list PDF logic
+		// This ensures consistent card rendering across all content types
+		
+		if (element.classList.contains('section-header')) {
+			// Section headers use simple text rendering
+			const headerHeight = 8;
+			this.addPrintSectionHeader(pdf, element.textContent, startX, startY, availableWidth, headerHeight);
+			return startY + headerHeight;
+		} else if (element.classList.contains('card-frame')) {
+			// Individual card frames use existing card rendering
+			const cardWidth = availableWidth / 4; // Standard 4-column grid
+			const cardHeight = 45; // Standard card height
+			
+			await this.addPrintCardToPDF(pdf, element, startX, startY, cardWidth, cardHeight);
+			return startY + cardHeight;
+		}
+		
+		// Fallback for unknown card grid elements
+		return startY + 30;
+	}
+
+	// === NEW METHOD: ARTICLE ELEMENT HEIGHT CALCULATION ===
+	/**
+	 * Estimates height for article elements in millimeters
+	 */
+	calculateArticleElementHeight(element, availableWidth) {
+		const classList = element.classList;
+		
+		if (classList.contains('upgrade-guide-header')) {
+			return 25; // Title + metadata
+		} else if (classList.contains('guide-header')) {
+			return 12; // Section headers
+		} else if (classList.contains('guide-paragraph-group') || 
+				   classList.contains('guide-paragraph')) {
+			const text = element.textContent || '';
+			const approxLines = Math.ceil(text.length / 100); // Rough estimate
+			return Math.max(20, approxLines * 4); // 4mm per line
+		} else if (classList.contains('guide-cardlist')) {
+			const listItems = element.querySelectorAll('li');
+			return 15 + (listItems.length * 3); // 3mm per list item
+		}
+		
+		// Default height for unknown article elements
+		return 30;
+	}
+
+	// === NEW METHOD: GENERIC ELEMENT RENDERING ===
+	/**
+	 * Fallback renderer for unknown element types
+	 */
+	async renderGenericElementToPDF(pdf, element, x, y, width, maxY) {
+		console.warn(`⚠️ Using generic renderer for: ${element.className}`);
+		
+		const defaultHeight = 30;
+		if (y + defaultHeight > maxY) {
+			throw new Error('Generic element too large for page');
+		}
+		
+		await this.renderElementToPDF(pdf, element, x, y, width, defaultHeight);
+		return y + defaultHeight + 5;
+	}
+
+	// === NEW METHOD: UNIVERSAL ELEMENT RENDERER ===
+	/**
+	 * Renders any DOM element to PDF using html2canvas
+	 * Applies PDF-optimized styling
+	 */
+	async renderElementToPDF(pdf, element, x, y, width, height) {
+		try {
+			const canvas = await html2canvas(element, {
+				scale: 1.5,
+				useCORS: true,
+				allowTaint: true,
+				backgroundColor: '#ffffff',
+				onclone: function(clonedDoc, element) {
+					// APPLY PDF-OPTIMIZED STYLING TO ALL ELEMENTS
+					const allElements = element.querySelectorAll('*');
+					allElements.forEach(el => {
+						el.style.color = '#000000';
+						el.style.backgroundColor = '#ffffff';
+						el.style.boxShadow = 'none';
+						if (el.style.opacity) el.style.opacity = '1';
+					});
+					
+					// ENHANCE SYMBOLS FOR PDF
+					const symbolElements = element.querySelectorAll('.set-symbol-stats');
+					symbolElements.forEach(symbol => {
+						symbol.style.transform = 'scale(1.4)';
+						symbol.style.transformOrigin = 'center center';
+					});
+					
+					// ENSURE TEXT READABILITY
+					const textElements = element.querySelectorAll('p, span, div, li');
+					textElements.forEach(textEl => {
+						textEl.style.color = '#000000';
+					});
+				}
+			});
+
+			const imgData = canvas.toDataURL('image/png');
+			pdf.addImage(imgData, 'PNG', x, y, width, height);
+			
+			// Add subtle border for visual separation
+			pdf.setDrawColor(200, 200, 200);
+			pdf.setLineWidth(0.1);
+			pdf.rect(x, y, width, height, 'D');
+			
+			return true;
+			
+		} catch (error) {
+			console.error('Element render failed:', error);
+			
+			// Fallback: Draw bounding box
+			pdf.setFillColor(255, 255, 255);
+			pdf.setDrawColor(136, 136, 136);
+			pdf.setLineWidth(0.3);
+			pdf.rect(x, y, width, height, 'FD');
+			
+			pdf.setTextColor(0, 0, 0);
+			pdf.setFontSize(6);
+			pdf.text(`[${element.className}]`, x + 2, y + 4);
+			
+			return false;
+		}
+	}
+
+	// === NEW METHOD: PAGE NUMBERING ===
+	/**
+	 * Adds consistent page numbering to PDF document
 	 */
 	addPageNumbersToPDF(pdf, pageWidth, pageHeight) {
 		const totalPages = pdf.internal.getNumberOfPages();
