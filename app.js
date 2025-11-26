@@ -946,41 +946,41 @@ class App {
     }
 	
 	determineContentType(input, fileContent = null) {
-    console.log(`🔍 Determining content type for:`, { input, hasFile: !!fileContent });
-    
-    // PRIORITY 1: FILE UPLOADS - Highest priority
-    if (fileContent) {
-        console.log('✅ Content type: custom-list (file upload)');
-        return 'custom-list';
-    }
-    
-    // PRIORITY 2: URL-BASED CONTENT DETECTION
-    if (typeof input === 'string' && input.trim()) {
-        const trimmedInput = input.trim();
-        
-        // Check for upgrade guide URLs first
-        if (this.isUpgradeGuideURL(trimmedInput)) {
-            console.log('✅ Content type: upgrade-guide (URL detection)');
-            return 'upgrade-guide';
-        }
-        
-        // Check for commander URLs second
-        if (this.extractCommanderFromURL(trimmedInput)) {
-            console.log('✅ Content type: commander-list (URL detection)');
-            return 'commander-list';
-        }
-    }
-    
-    // PRIORITY 3: CURRENTLY SELECTED COMMANDER
-    if (this.currentCommander) {
-        console.log('✅ Content type: commander-list (current selection)');
-        return 'commander-list';
-    }
-    
-    // PRIORITY 4: FALLBACK FOR UNKNOWN CONTENT
-    console.log('⚠️ Content type: unknown (fallback)');
-    return 'unknown';
-}
+	    console.log(`🔍 Determining content type for:`, { input, hasFile: !!fileContent });
+	    
+	    // PRIORITY 1: FILE UPLOADS - Highest priority
+	    if (fileContent) {
+	        console.log('✅ Content type: custom-list (file upload)');
+	        return 'custom-list';
+	    }
+	    
+	    // PRIORITY 2: URL-BASED CONTENT DETECTION
+	    if (typeof input === 'string' && input.trim()) {
+	        const trimmedInput = input.trim();
+	        
+	        // Check for upgrade guide URLs first
+	        if (this.isUpgradeGuideURL(trimmedInput)) {
+	            console.log('✅ Content type: upgrade-guide (URL detection)');
+	            return 'upgrade-guide';
+	        }
+	        
+	        // Check for commander URLs second
+	        if (this.extractCommanderFromURL(trimmedInput)) {
+	            console.log('✅ Content type: commander-list (URL detection)');
+	            return 'commander-list';
+	        }
+	    }
+	    
+	    // PRIORITY 3: CURRENTLY SELECTED COMMANDER
+	    if (this.currentCommander) {
+	        console.log('✅ Content type: commander-list (current selection)');
+	        return 'commander-list';
+	    }
+	    
+	    // PRIORITY 4: FALLBACK FOR UNKNOWN CONTENT
+	    console.log('⚠️ Content type: unknown (fallback)');
+	    return 'unknown';
+	}
 }
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -1001,3 +1001,4 @@ window.addEventListener('error', function(event) {
 window.addEventListener('unhandledrejection', function(event) {
     console.error('Unhandled promise rejection:', event.reason);
 });
+
