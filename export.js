@@ -1075,7 +1075,7 @@ class ExportManager {
 			
 			// USE THE APPROPRIATE CARD RENDERER
 			if (isUpgradeGuide) {
-				await this.renderUpgradeCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
+				await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
 			} else {
 				await this.addPrintCardToPDF(pdf, card, cardX, currentY, cardWidth, cardHeight);
 			}
@@ -1213,7 +1213,7 @@ class ExportManager {
 			// Text content - tight estimation
 			const text = element.textContent || '';
 			const lines = Math.ceil(text.length / 80);
-			return Math.max(15, lines * 4 + 5); // Much tighter
+			return Math.max(20, lines * 6 + 8); // Much tighter
 		}
 	}
 
@@ -1242,7 +1242,7 @@ class ExportManager {
 		const lines = pdf.splitTextToSize(text, maxTextWidth);
 		
 		// TIGHT line spacing
-		const lineHeight = fontSize * 0.3;
+		const lineHeight = fontSize * 0.5;
 		const totalHeight = lines.length * lineHeight;
 		
 		lines.forEach((line, index) => {
@@ -1255,3 +1255,4 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
+
