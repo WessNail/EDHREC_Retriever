@@ -661,15 +661,29 @@ class ExportManager {
 				if (element.classList.contains('guide-cardlist')) {
 					currentY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
 				} 
-				else if (element.classList.contains('card-grid')) {
-					// EXTRACT CARDS FROM GRID CONTAINER
-					const cardFrames = element.querySelectorAll('.card-frame');
-					if (cardFrames.length > 0) {
-						currentY = await this.renderCardGridSection(
-							pdf, Array.from(cardFrames), margin, currentY, availableWidth, pageHeight, true
-						);
+			else if (element.classList.contains('card-grid')) {
+				// ROW-BY-ROW CARD PLACEMENT
+				const cardFrames = Array.from(element.querySelectorAll('.card-frame'));
+				const cardsPerRow = 4;
+				const cardHeight = 45; // mm per row
+				
+				for (let rowStart = 0; rowStart < cardFrames.length; rowStart += cardsPerRow) {
+					const rowCards = cardFrames.slice(rowStart, rowStart + cardsPerRow);
+					
+					// CHECK IF ROW FITS ON CURRENT PAGE
+					if (currentY + cardHeight > pageHeight - margin) {
+						pdf.addPage();
+						currentPage++;
+						currentY = margin;
+						if (currentPage > MAX_PAGES) break;
 					}
+					
+					// RENDER THIS ROW
+					currentY = await this.renderCardGridSection(
+						pdf, rowCards, margin, currentY, availableWidth, pageHeight, true
+					);
 				}
+			}
 				else {
 					// REGULAR TEXT
 					currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
@@ -1195,6 +1209,9 @@ class ExportManager {
 				cardCount += section.querySelectorAll('li').length;
 			});
 			return Math.max(40, cardCount * 2.5 + 20); // Tight spacing
+		} else if (element.classList.contains('card-grid')) {
+			// ADD THIS LINE - Minimal height for card grids
+			return 10;
 		} else if (element.classList.contains('card-frame')) {
 			return 45; // Standard card height
 		} else if (element.classList.contains('guide-header') || element.classList.contains('section-header')) {
@@ -1203,7 +1220,7 @@ class ExportManager {
 			// Text content - tight estimation
 			const text = element.textContent || '';
 			const lines = Math.ceil(text.length / 80);
-			return Math.max(20, lines * 6 + 8); // Much tighter
+			return Math.max(20, lines * 6 + 8); // Line height size
 		}
 	}
 
@@ -1245,5 +1262,3 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
-
-
