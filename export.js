@@ -590,11 +590,11 @@ class ExportManager {
 	 * Implements proper decklist text rendering with 3-column layout
 	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
-		console.log('📄 Starting Fixed Upgrade Guide PDF generation');
+		console.log('📄 Starting OPTIMIZED Upgrade Guide PDF generation');
 		
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid || cardGrid.children.length === 0) {
-			throw new Error('No upgrade guide content available for PDF generation');
+			throw new Error('No upgrade guide content available');
 		}
 
 		this.showPDFLoading();
@@ -602,6 +602,7 @@ class ExportManager {
 		try {
 			const { jsPDF } = this.pdfjs;
 			const pdf = new jsPDF('p', 'mm', 'a4');
+			const layoutEngine = new IntelligentLayoutEngine();
 			
 			// PDF dimensions
 			const pageWidth = 210;
@@ -611,79 +612,42 @@ class ExportManager {
 			
 			let currentY = margin;
 			let currentPage = 1;
-			const MAX_PAGES = 50;
 			
-			// Get all elements and group them by header-content relationships
+			// Get all elements and group them
 			const children = Array.from(cardGrid.children);
 			const contentGroups = this.groupContentWithHeaders(children);
 			
-			console.log(`🔍 Processing ${contentGroups.length} content groups with header grouping`);
+			console.log(`🔍 Processing ${contentGroups.length} content groups with intelligent layout`);
 			
-			// Process each content group (header + its content)
-			for (const group of contentGroups) {
-				if (currentPage > MAX_PAGES) break;
-				
-				// Calculate group height to check if it fits on current page
-				const groupHeight = this.estimateGroupHeight(group, availableWidth, pageHeight);
-				
-				// If group doesn't fit, start new page
-				if (currentY + groupHeight > pageHeight - margin && currentPage <= MAX_PAGES) {
-					pdf.addPage();
-					currentPage++;
-					currentY = margin;
-					console.log(`📄 Added new page for content group (${currentPage})`);
+			// STEP 1: Render compact header with date on right
+			const guideData = this.extractGuideMetadata(children);
+			currentY = layoutEngine.renderCompactHeader(pdf, guideData, margin, currentY);
+			currentY += 10; // Space after header
+			
+			// STEP 2: Optimize content layout
+			const optimizedGroups = layoutEngine.optimizeContentLayout(contentGroups, pdf, currentY);
+			
+			// STEP 3: Render optimized groups
+			for (const groupBatch of optimizedGroups) {
+				for (const group of groupBatch) {
+					// Use existing rendering but with tighter spacing
+					currentY = await this.renderContentGroup(pdf, group, margin, currentY, availableWidth, pageHeight, true);
 				}
-				
-				// Render each element in the group
-				for (const element of group) {
-					// HYBRID RENDERING ROUTING
-					if (element.classList.contains('guide-cardlist')) {
-						console.log('🎯 Routing to DECKLIST TEXT RENDERER');
-						// Render decklist as structured text with 3-column layout
-						currentY = await this.renderDecklistAsText(
-							pdf, element, margin, currentY, availableWidth, pageHeight
-						);
-						
-					} else if (element.classList.contains('card-grid')) {
-						console.log('🎯 Routing to UPGRADE CARD GRID RENDERER');
-						
-						// Extract all card frames from the grid container
-						const cardFrames = Array.from(element.querySelectorAll('.card-frame'));
-						console.log(`🃏 Found ${cardFrames.length} card frames in grid`);
-						
-						// Use card grid renderer with upgrade guide flag
-						currentY = await this.renderCardGridSection(
-							pdf, cardFrames, margin, currentY, availableWidth, pageHeight, true // isUpgradeGuide = true
-						);
-						
-					} else if (element.classList.contains('card-frame')) {
-						console.log('🎯 Routing to COMMANDER-STYLE CARD GRID');
-						
-						// Collect all consecutive card frames
-						const remainingElements = group.slice(group.indexOf(element));
-						const cardFrames = remainingElements.filter(el => 
-							el.classList.contains('card-frame')
-						);
-						
-						if (cardFrames.length > 0) {
-							// Use proven commander list rendering
-							currentY = await this.renderCardGridSection(
-								pdf, cardFrames, margin, currentY, availableWidth, pageHeight
-							);
-							
-							// Skip processed card frames
-							break;
-						}
-						
-					} else {
-						console.log('🎯 Routing to TEXT RENDERER');
-						// Render text content as PDF text
-						currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
-					}
-					
-					// Add spacing between elements
-					currentY += 5;
-				}
+			}
+			
+			// STEP 4: Ensure card grid starts immediately after last content
+			// No unnecessary page break before cards
+			if (currentY > pageHeight - 100) { // If less than 100mm left, new page
+				pdf.addPage();
+				currentY = margin;
+			}
+			
+			// Render card grid immediately after last content
+			const cardFrames = document.querySelectorAll('.card-frame');
+			if (cardFrames.length > 0) {
+				currentY = await this.renderCardGridSection(
+					pdf, Array.from(cardFrames), margin, currentY, availableWidth, pageHeight, true
+				);
 			}
 			
 			// Add final page numbers
@@ -692,12 +656,12 @@ class ExportManager {
 			// Save and complete
 			pdf.save(filename);
 			this.hidePDFLoading();
-			console.log('✅ Upgrade Guide PDF generation completed with fixes');
+			console.log('✅ Optimized Upgrade Guide PDF generation completed');
 			return true;
 			
 		} catch (error) {
 			this.hidePDFLoading();
-			console.error('❌ Upgrade Guide PDF generation failed:', error);
+			console.error('❌ Optimized PDF generation failed:', error);
 			throw error;
 		}
 	}
@@ -1015,43 +979,27 @@ class ExportManager {
 	async renderUpgradeCardToPDF(pdf, cardElement, x, y, width, height) {
 		console.log('🃏 Rendering upgrade card (without inclusion percentage)');
 		
-		// Create a clone of the card element to modify for PDF rendering
-		const clonedCard = cardElement.cloneNode(true);
-		
-		// Remove inclusion percentage element if present
-		const inclusionElement = clonedCard.querySelector('.inclusion-percentage');
-		if (inclusionElement) {
-			inclusionElement.remove();
-			console.log('✅ Removed inclusion percentage from upgrade card');
-		}
+		// Use the original element - NO CLONING needed
+		const element = cardElement;
 		
 		try {
-			const canvas = await html2canvas(clonedCard, {
+			const canvas = await html2canvas(element, {
 				scale: 1.5,
 				useCORS: true,
 				allowTaint: true,
 				backgroundColor: '#ffffff',
 				onclone: function(clonedDoc, element) {
-					// Apply PDF-optimized styling (same as original)
-					const allElements = element.querySelectorAll('*');
-					allElements.forEach(el => {
-						el.style.color = '#000000';
-						el.style.backgroundColor = '#ffffff';
-						el.style.boxShadow = 'none';
-						if (el.style.opacity) el.style.opacity = '1';
-					});
-					
-					// Enhance symbols for PDF
-					const symbolElements = element.querySelectorAll('.set-symbol-stats');
-					symbolElements.forEach(symbol => {
-						symbol.style.transform = 'scale(1.4)';
-						symbol.style.transformOrigin = 'center center';
-					});
-					
-					// Style back indicators for double-faced cards
-					const backIndicators = element.querySelectorAll('.back-indicator');
-					backIndicators.forEach(indicator => {
-						indicator.style.cssText = `
+					// Remove inclusion percentage from the clone
+					const inclusionElement = element.querySelector('.inclusion-percentage');
+					if (inclusionElement) {
+						inclusionElement.remove();
+					}
+
+					// Apply the EXACT SAME styling as the working method
+					const clonedBackIndicator = element.querySelector('.back-indicator');     
+					if (clonedBackIndicator) {
+						clonedBackIndicator.setAttribute('style', '');
+						clonedBackIndicator.style.cssText = `
 							color: white !important;
 							background-color: #444 !important;
 							border: 2px solid #444 !important;
@@ -1065,6 +1013,31 @@ class ExportManager {
 							min-width: 80px !important;
 							line-height: 1.2 !important;
 						`;
+					}
+					
+					// Apply general white background (excluding back indicators AND their children)
+					const allElements = clonedDoc.querySelectorAll('*');
+					allElements.forEach(el => {
+						const isInBackIndicator = el.closest('.back-indicator');
+						if (!el.classList.contains('back-indicator') && !isInBackIndicator) {
+							el.style.color = '#000000';
+							el.style.backgroundColor = '#ffffff';
+							el.style.boxShadow = 'none';
+						}
+					});
+					
+					// Apply card frame styling
+					const cardFrames = clonedDoc.querySelectorAll('.card-frame');
+					cardFrames.forEach(frame => {
+						frame.style.border = '1px solid #888888';
+						frame.style.background = '#ffffff';
+					});
+					
+					// Symbol scaling for PDF
+					const symbolElements = element.querySelectorAll('.set-symbol-stats');
+					symbolElements.forEach(symbol => {
+						symbol.style.transform = 'scale(1.4)';
+						symbol.style.transformOrigin = 'center center';
 					});
 				}
 			});
@@ -1082,7 +1055,7 @@ class ExportManager {
 		} catch (error) {
 			console.error('❌ Upgrade card render failed:', error);
 			
-			// Fallback rendering
+			// Fallback - use the working method's fallback
 			pdf.setFillColor(255, 255, 255);
 			pdf.setDrawColor(136, 136, 136);
 			pdf.setLineWidth(0.3);
@@ -1090,7 +1063,7 @@ class ExportManager {
 			
 			pdf.setTextColor(0, 0, 0);
 			pdf.setFontSize(7);
-			const cardName = clonedCard.querySelector('.card-name')?.textContent || 'Unknown Card';
+			const cardName = element.querySelector('.card-name')?.textContent || 'Unknown Card';
 			const text = cardName.substring(0, 30);
 			pdf.text(text, x + 2, y + 8);
 		}
@@ -1260,3 +1233,146 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
+
+/**
+ * Intelligent PDF Layout Engine - Analyzes content and optimizes space usage
+ */
+class IntelligentLayoutEngine {
+    constructor() {
+        this.pageWidth = 210;
+        this.pageHeight = 297;
+        this.margin = 15;
+        this.availableWidth = this.pageWidth - (2 * this.margin);
+    }
+
+    /**
+     * Analyze content groups and optimize page breaks
+     */
+    optimizeContentLayout(contentGroups, pdf, startY) {
+        let currentY = startY;
+        const optimizedGroups = [];
+        
+        // Group small content together
+        for (let i = 0; i < contentGroups.length; i++) {
+            const group = contentGroups[i];
+            const groupHeight = this.estimateGroupHeight(group);
+            
+            // Check if current group fits on current page
+            if (currentY + groupHeight > this.pageHeight - this.margin) {
+                // If it doesn't fit, start new page
+                pdf.addPage();
+                currentY = this.margin;
+            }
+            
+            // Check if we can combine with next group
+            if (i < contentGroups.length - 1) {
+                const nextGroup = contentGroups[i + 1];
+                const nextHeight = this.estimateGroupHeight(nextGroup);
+                
+                // If both current and next group are small, combine them
+                if (groupHeight < 40 && nextHeight < 40 && 
+                    currentY + groupHeight + nextHeight < this.pageHeight - this.margin) {
+                    
+                    console.log(`🔄 Combining small groups: ${groupHeight}mm + ${nextHeight}mm`);
+                    optimizedGroups.push([group, nextGroup]);
+                    i++; // Skip next group since we combined it
+                    currentY += groupHeight + nextHeight;
+                    continue;
+                }
+            }
+            
+            optimizedGroups.push([group]);
+            currentY += groupHeight;
+        }
+        
+        return optimizedGroups;
+    }
+
+    /**
+     * Smart header layout - date to the right of title
+     */
+    renderCompactHeader(pdf, guideData, startX, startY) {
+        const title = guideData.title || 'Upgrade Guide';
+        const date = guideData.date || new Date().toLocaleDateString();
+        
+        // Title on left
+        pdf.setFontSize(14);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(title, startX, startY);
+        
+        // Date on right, aligned with title baseline
+        pdf.setFontSize(10);
+        pdf.setFont(undefined, 'normal');
+        const dateWidth = pdf.getTextWidth(date);
+        pdf.text(date, startX + this.availableWidth - dateWidth, startY);
+        
+        // Author below title if exists
+        if (guideData.author) {
+            pdf.setFontSize(10);
+            pdf.text(`By ${guideData.author}`, startX, startY + 6);
+            return startY + 12; // Return new Y position
+        }
+        
+        return startY + 8; // Return new Y position
+    }
+
+    /**
+     * Optimize decklist layout - dynamic column balancing
+     */
+    optimizeDecklistLayout(decklistData, availableHeight) {
+        const sectionsWithHeights = this.calculateSectionHeights(decklistData.sections);
+        
+        // Try 3 columns first
+        let columns = this.distributeSectionsToColumns(sectionsWithHeights, availableHeight);
+        
+        // If columns are unbalanced or don't fit, try 2 columns
+        const maxColHeight = Math.max(...columns.map(col => 
+            col.reduce((sum, section) => sum + section.height, 0)
+        ));
+        
+        if (maxColHeight > availableHeight * 0.8) {
+            console.log('🔄 Switching to 2-column layout for better fit');
+            columns = this.distributeSectionsToColumns(sectionsWithHeights, availableHeight, 2);
+        }
+        
+        return columns;
+    }
+
+    /**
+     * Estimate group height for layout planning
+     */
+    estimateGroupHeight(group) {
+        let height = 0;
+        
+        if (Array.isArray(group)) {
+            // Combined groups
+            group.forEach(subGroup => {
+                height += this.calculateSingleGroupHeight(subGroup);
+            });
+            height += 5; // Spacing between combined groups
+        } else {
+            // Single group
+            height = this.calculateSingleGroupHeight(group);
+        }
+        
+        return height;
+    }
+
+    calculateSingleGroupHeight(group) {
+        let height = 0;
+        
+        if (group.type === 'paragraph-group') {
+            // Tighter paragraph spacing for PDF
+            height = group.blocks.length * 15 + 10; // Reduced from ~25mm per paragraph
+        } else if (group.type === 'decklist') {
+            // More compact decklist estimation
+            const totalCards = group.sections.reduce((sum, section) => sum + section.cards.length, 0);
+            height = Math.max(40, totalCards * 2.5 + 20); // Much tighter than original
+        } else if (group.type === 'header') {
+            height = 8; // Reduced header height
+        }
+        
+        return height;
+    }
+}
+
