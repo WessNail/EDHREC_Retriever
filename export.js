@@ -589,7 +589,7 @@ class ExportManager {
 	 * SIMPLE Upgrade Guide PDF - 100% Working Version
 	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
-		console.log('📄 Starting SIMPLE Upgrade Guide PDF');
+		console.log('📄 Starting Upgrade Guide PDF');
 		
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid) throw new Error('No content available');
@@ -609,19 +609,17 @@ class ExportManager {
 			let currentPage = 1;
 			const MAX_PAGES = 20;
 			
-			// SIMPLE HEADER - Title left, date right
+			// SIMPLE HEADER
 			const header = cardGrid.querySelector('.upgrade-guide-header');
 			if (header) {
 				const title = header.querySelector('.guide-title')?.textContent || 'Upgrade Guide';
 				const date = header.querySelector('.guide-date')?.textContent || new Date().toLocaleDateString();
 				const author = header.querySelector('.guide-author')?.textContent?.replace('By ', '') || '';
 				
-				// Title on left
 				pdf.setFontSize(14);
 				pdf.setFont(undefined, 'bold');
 				pdf.text(title, margin, currentY);
 				
-				// Date on right
 				pdf.setFontSize(10);
 				pdf.setFont(undefined, 'normal');
 				const dateWidth = pdf.getTextWidth(date);
@@ -629,16 +627,15 @@ class ExportManager {
 				
 				currentY += 6;
 				
-				// Author below if exists
 				if (author) {
 					pdf.text(`By ${author}`, margin, currentY);
 					currentY += 6;
 				}
 				
-				currentY += 8; // Space after header
+				currentY += 8;
 			}
 			
-			// PROCESS ALL CONTENT IN ORDER - NO FANCY GROUPING BULLSHIT
+			// PROCESS ALL CONTENT
 			const children = Array.from(cardGrid.children);
 			
 			for (let i = 0; i < children.length; i++) {
@@ -649,7 +646,7 @@ class ExportManager {
 				// Skip header we already processed
 				if (element.classList.contains('upgrade-guide-header')) continue;
 				
-				// ESTIMATE HEIGHT - SIMPLE
+				// ESTIMATE HEIGHT
 				let elementHeight = this.estimateElementHeight(element);
 				
 				// CHECK PAGE BREAK
@@ -663,29 +660,22 @@ class ExportManager {
 				// RENDER BASED ON TYPE
 				if (element.classList.contains('guide-cardlist')) {
 					currentY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
-				} else if (element.classList.contains('card-frame')) {
-					// COLLECT ALL CARDS IN A ROW
-					const cardFrames = [];
-					for (let j = i; j < children.length; j++) {
-						if (children[j].classList.contains('card-frame')) {
-							cardFrames.push(children[j]);
-						} else {
-							break;
-						}
-					}
-					
+				} 
+				else if (element.classList.contains('card-grid')) {
+					// EXTRACT CARDS FROM GRID CONTAINER
+					const cardFrames = element.querySelectorAll('.card-frame');
 					if (cardFrames.length > 0) {
 						currentY = await this.renderCardGridSection(
-							pdf, cardFrames, margin, currentY, availableWidth, pageHeight, true
+							pdf, Array.from(cardFrames), margin, currentY, availableWidth, pageHeight, true
 						);
-						i += cardFrames.length - 1; // Skip processed cards
 					}
-				} else {
-					// REGULAR TEXT - TIGHT SPACING
-					currentY = this.renderCompactTextElement(pdf, element, margin, currentY, availableWidth);
+				}
+				else {
+					// REGULAR TEXT
+					currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
 				}
 				
-				currentY += 3; // Minimal spacing between elements
+				currentY += 5;
 			}
 			
 			// ADD PAGE NUMBERS
@@ -1255,4 +1245,5 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
+
 
