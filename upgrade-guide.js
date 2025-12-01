@@ -1,4 +1,4 @@
-// VERSION:1
+// VERSION:2
 // upgrade-guide.js - Professional NFD Integration
 // EDHREC Upgrade Guide Extraction System with Specific Error Handling
 
@@ -606,7 +606,6 @@ class UpgradeGuideDisplayEngine {
         return div.innerHTML;
     }
 }
-}
 
 // =============================================================================
 // GLOBAL EXPORTS AND INTEGRATION
@@ -631,3 +630,4 @@ async function extractEDHRECUpgradeGuide(url) {
 window.extractEDHRECUpgradeGuide = extractEDHRECUpgradeGuide;
 
 console.log('✅ upgrade-guide.js loaded with professional NFD integration - NO FALLBACKS');
+
