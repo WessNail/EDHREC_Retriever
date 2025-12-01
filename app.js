@@ -1,3 +1,4 @@
+// VERSION:1
 // Main Application Class with Comprehensive Debugging
 class App {
     constructor() {
