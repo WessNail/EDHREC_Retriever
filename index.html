@@ -1,3 +1,4 @@
+<!-- VERSION:1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -78,5 +79,172 @@
     <script src="export.js"></script>
 	<script src="upgrade-guide.js"></script>
     <script src="app.js"></script>
+	
+	<!-- Auto Version Detection System -->
+	<script>
+	// Auto-detect versions from file headers
+	async function detectFileVersions() {
+		const fileMap = {
+			'index.html': { type: 'html', order: 1 },
+			'styles.css': { type: 'css', order: 2 },
+			'scryfall.js': { type: 'js', order: 3 },
+			'symbol-manager.js': { type: 'js', order: 4 },
+			'edhrec.js': { type: 'js', order: 5 },
+			'display.js': { type: 'js', order: 6 },
+			'export.js': { type: 'js', order: 7 },
+			'upgrade-guide.js': { type: 'js', order: 8 },
+			'app.js': { type: 'js', order: 9 }
+		};
+		
+		const versions = {};
+		const loadingOrder = [];
+		
+		// Start with current file (index.html)
+		const htmlContent = document.documentElement.outerHTML;
+		const htmlMatch = htmlContent.match(/<!--\s*VERSION:(\d+)\s*-->/);
+		versions['index.html'] = htmlMatch ? parseInt(htmlMatch[1]) : 0;
+		loadingOrder.push('index.html');
+		
+		// Load and parse CSS version
+		try {
+			const styleSheets = Array.from(document.styleSheets);
+			for (const sheet of styleSheets) {
+				if (sheet.href && sheet.href.includes('styles.css')) {
+					const response = await fetch(sheet.href);
+					const cssText = await response.text();
+					const cssMatch = cssText.match(/\/\*\s*VERSION:(\d+)\s*\*\//);
+					versions['styles.css'] = cssMatch ? parseInt(cssMatch[1]) : 0;
+					loadingOrder.push('styles.css');
+					break;
+				}
+			}
+		} catch (e) {
+			versions['styles.css'] = 0;
+		}
+		
+		// Load JS file versions
+		const scripts = Array.from(document.querySelectorAll('script[src]'));
+		const jsFiles = scripts.filter(script => {
+			const src = script.src;
+			return Object.keys(fileMap).some(filename => 
+				src.includes(filename) && fileMap[filename].type === 'js'
+			);
+		});
+		
+		// Sort JS files by loading order
+		jsFiles.sort((a, b) => {
+			const aOrder = Object.entries(fileMap).find(([name]) => a.src.includes(name))?.[1]?.order || 99;
+			const bOrder = Object.entries(fileMap).find(([name]) => b.src.includes(name))?.[1]?.order || 99;
+			return aOrder - bOrder;
+		});
+		
+		// Parse each JS file
+		for (const script of jsFiles) {
+			const filename = Object.keys(fileMap).find(name => script.src.includes(name));
+			if (!filename) continue;
+			
+			try {
+				const response = await fetch(script.src);
+				const jsText = await response.text();
+				const jsMatch = jsText.match(/\/\/\s*VERSION:(\d+)/);
+				versions[filename] = jsMatch ? parseInt(jsMatch[1]) : 0;
+				loadingOrder.push(filename);
+			} catch (e) {
+				versions[filename] = 0;
+				loadingOrder.push(filename);
+			}
+		}
+		
+		return { versions, loadingOrder };
+	}
+
+	// Generate version string
+	function generateVersionString(versions, loadingOrder) {
+		return loadingOrder.map(filename => versions[filename] || 0).join('.');
+	}
+
+	// Create version display
+	function createVersionDisplay(versionString) {
+		const versionDiv = document.createElement('div');
+		versionDiv.id = 'versionDisplay';
+		versionDiv.style.cssText = `
+			position: fixed;
+			top: 5px;
+			left: 5px;
+			background: rgba(44, 62, 80, 0.9);
+			color: white;
+			padding: 2px 6px;
+			border-radius: 3px;
+			font-family: monospace;
+			font-size: 11px;
+			z-index: 9999;
+			opacity: 0.7;
+			transition: opacity 0.3s;
+			border: 1px solid rgba(255, 255, 255, 0.2);
+			cursor: pointer;
+			user-select: none;
+		`;
+		
+		versionDiv.title = `v${versionString}\nClick to hide/show. Drag to move.`;
+		versionDiv.textContent = `v${versionString}`;
+		
+		// Toggle visibility
+		versionDiv.addEventListener('click', (e) => {
+			e.stopPropagation();
+			versionDiv.style.opacity = versionDiv.style.opacity === '0' ? '0.7' : '0';
+		});
+		
+		// Draggable
+		let isDragging = false;
+		let dragOffset = { x: 0, y: 0 };
+		
+		versionDiv.addEventListener('mousedown', (e) => {
+			if (e.button !== 0) return;
+			isDragging = true;
+			const rect = versionDiv.getBoundingClientRect();
+			dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+			e.preventDefault();
+		});
+		
+		document.addEventListener('mousemove', (e) => {
+			if (!isDragging) return;
+			versionDiv.style.left = `${e.clientX - dragOffset.x}px`;
+			versionDiv.style.top = `${e.clientY - dragOffset.y}px`;
+		});
+		
+		document.addEventListener('mouseup', () => isDragging = false);
+		
+		document.body.appendChild(versionDiv);
+		return versionDiv;
+	}
+
+	// Main initialization
+	async function initVersionSystem() {
+		console.log('🔍 Scanning file versions...');
+		
+		const { versions, loadingOrder } = await detectFileVersions();
+		const versionString = generateVersionString(versions, loadingOrder);
+		
+		console.log('📋 Detected versions:', versions);
+		console.log('📦 Loading order:', loadingOrder);
+		console.log(`📱 EDHREC Tool v${versionString} loaded`);
+		
+		const display = createVersionDisplay(versionString);
+		window.appVersion = versionString;
+		
+		// Log any missing versions
+		const missing = Object.keys(versions).filter(f => versions[f] === 0);
+		if (missing.length > 0) {
+			console.warn('⚠️ Missing version headers in:', missing);
+		}
+	}
+
+	// Start when DOM is ready
+	if (document.readyState === 'loading') {
+		document.addEventListener('DOMContentLoaded', initVersionSystem);
+	} else {
+		initVersionSystem();
+	}
+	</script>
 </body>
 </html>
