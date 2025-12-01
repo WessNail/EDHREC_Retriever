@@ -1,3 +1,4 @@
+// VERSION:1
 // Symbol Manager - Local Set Symbol Database
 class SymbolManager {
     constructor() {
@@ -54,7 +55,7 @@ class SymbolManager {
 				this.updateConversionTracking();
 				this.saveToStorage();
 			}
-
+			
 			/*
 			// FORCE REFRESH logic remains but now with enhanced criteria
 			if (this.database && (this.database.version === '3.0' || this.isDatabaseCorrupted())) {
@@ -883,5 +884,3 @@ if (document.readyState === 'loading') {
 
 // Export for use in other modules
 window.SymbolManager = SymbolManager;
-
-
