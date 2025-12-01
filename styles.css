@@ -1,3 +1,4 @@
+/* VERSION:1 */
 /* Reset and Base Styles */
 * {
     margin: 0;
@@ -844,22 +845,6 @@ body {
     font-weight: 600;
 }
 
-/* Ensure upgrade cards use existing grid system */
-.upgrade-cards-container .card-grid {
-    display: grid;
-    gap: var(--spacing-lg);
-    margin-top: var(--spacing-xl);
-}
-
-.upgrade-cards-container .section-header {
-    grid-column: 1 / -1;
-    background: var(--primary-color);
-    color: white;
-    padding: var(--spacing-md) var(--spacing-lg);
-    border-radius: var(--card-border-radius);
-    margin-bottom: var(--spacing-sm);
-}
-
 /* Multi-column decklist layout - NEW */
 .decklist-section {
     columns: 3 250px; /* Auto columns, min 250px width */
@@ -886,6 +871,22 @@ body {
     line-height: 1.2;
     font-size: var(--font-size-sm);
     break-inside: avoid;
+}
+
+/* Ensure upgrade cards use existing grid system */
+.upgrade-cards-container .card-grid {
+    display: grid;
+    gap: var(--spacing-lg);
+    margin-top: var(--spacing-xl);
+}
+
+.upgrade-cards-container .section-header {
+    grid-column: 1 / -1;
+    background: var(--primary-color);
+    color: white;
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-radius: var(--card-border-radius);
+    margin-bottom: var(--spacing-sm);
 }
 
 /* Responsive Design for Upgrade Guides */
@@ -977,4 +978,3 @@ body {
     }
 
 }
-
