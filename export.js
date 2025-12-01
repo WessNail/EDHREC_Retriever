@@ -1,4 +1,4 @@
-// VERSION:1
+// VERSION:2
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -592,6 +592,8 @@ class ExportManager {
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
 		console.log('📄 Starting Upgrade Guide PDF');
 		
+		this.setupDecklistDiagnostics();
+		
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid) throw new Error('No content available');
 
@@ -1038,7 +1040,8 @@ class ExportManager {
 	}
 	
 	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
-		console.log('🎯 Rendering decklist with proven 4-column layout');
+		    console.log('🚨🚨🚨 NEW RENDERDECKLISTASTEXT CALLED 🚨🚨🚨');
+			console.log('This should be VERY visible in console');
 		
 		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
@@ -1643,6 +1646,34 @@ class ExportManager {
 		});
 		
 		return y + totalHeight + 2; // Minimal spacing after
+	}
+	
+	// TEMPORARY DIAGNOSTIC - Add at TOP of ExportManager class
+	setupDecklistDiagnostics() {
+		console.log('🔍 DECKLIST DIAGNOSTICS ENABLED');
+		
+		// Override the renderDecklistAsText to trace calls
+		const originalMethod = this.renderDecklistAsText;
+		
+		this.renderDecklistAsText = function(pdf, element, startX, startY, availableWidth, pageHeight) {
+			console.log('🎯 TRACE: renderDecklistAsText CALLED');
+			console.log('📊 Call details:', {
+				elementClass: element.className,
+				elementTag: element.tagName,
+				startY: startY,
+				availableWidth: availableWidth,
+				pageHeight: pageHeight,
+				caller: new Error().stack.split('\n')[2] // Get caller info
+			});
+			
+			// Check which method is being called
+			const isNewMethod = originalMethod.toString().includes('PHASE 1: Parse decklist structure');
+			console.log(`🔍 Method version: ${isNewMethod ? 'NEW' : 'OLD'}`);
+			
+			return originalMethod.call(this, pdf, element, startX, startY, availableWidth, pageHeight);
+		};
+		
+		console.log('✅ Diagnostics installed - reload page and generate PDF');
 	}
 
 }
