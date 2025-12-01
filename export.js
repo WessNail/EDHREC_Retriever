@@ -861,111 +861,268 @@ class ExportManager {
 		return columns;
 	}
 
+
 	/**
-	 * PROVEN FIX: renderDecklistAsText 
-	 * Replaces current method in export.js
-	 * 
-	 * Fixes all 5 failures:
-	 * - 4 columns instead of 3
-	 * - Direct placement below paragraphs  
-	 * - Proper column distribution
-	 * - No huge gaps between content
-	 * - Header orphan protection
+	 * Parse decklist DOM element into structured data
 	 */
+	parseDecklistStructure(element) {
+		console.log('🔍 Parsing decklist structure from DOM');
+		
+		const decklist = {
+			title: '',
+			sections: []
+		};
+		
+		try {
+			// Extract decklist title
+			const titleElement = element.querySelector('h4');
+			if (titleElement) {
+				decklist.title = titleElement.textContent.trim();
+				console.log(`📋 Decklist title: ${decklist.title}`);
+			}
+			
+			// Extract all sections
+			const sectionElements = element.querySelectorAll('.decklist-section > div');
+			console.log(`📋 Found ${sectionElements.length} sections in decklist`);
+			
+			sectionElements.forEach((sectionEl, index) => {
+				const section = {
+					header: '',
+					cards: []
+				};
+				
+				// Extract section header
+				const headerElement = sectionEl.querySelector('h5');
+				if (headerElement) {
+					section.header = headerElement.textContent.trim();
+				} else {
+					section.header = `Section ${index + 1}`;
+				}
+				
+				// Extract card list items
+				const cardElements = sectionEl.querySelectorAll('li');
+				cardElements.forEach(cardEl => {
+					const cardText = cardEl.textContent.trim();
+					if (cardText) {
+						section.cards.push(cardText);
+					}
+				});
+				
+				console.log(`📋 Section "${section.header}": ${section.cards.length} cards`);
+				decklist.sections.push(section);
+			});
+			
+		} catch (error) {
+			console.error('❌ Error parsing decklist structure:', error);
+		}
+		
+		return decklist;
+	}
+
+	/**
+	 * Calculate optimized section heights with tight spacing
+	 */
+	calculateOptimizedSectionHeights(sections) {
+		console.log('📏 Calculating optimized section heights');
+		
+		// TIGHT spacing for half-page optimization
+		const HEADER_HEIGHT = 5;    // Reduced from 6mm
+		const CARD_HEIGHT = 2.8;    // Reduced from 3.2mm  
+		const SECTION_SPACING = 1;  // Reduced from 3mm
+		
+		return sections.map(section => {
+			const cardsHeight = section.cards.length * CARD_HEIGHT;
+			const totalHeight = HEADER_HEIGHT + cardsHeight + SECTION_SPACING;
+			
+			console.log(`📏 Section "${section.header}": ${totalHeight.toFixed(1)}mm (${section.cards.length} cards)`);
+			
+			return {
+				...section,
+				height: totalHeight,
+				headerHeight: HEADER_HEIGHT,
+				cardHeight: CARD_HEIGHT
+			};
+		});
+	}
+
+	/**
+	 * Determine optimal font scale for half-page fit
+	 */
+	determineOptimalFontScale(totalHeight, availableHeight) {
+		console.log(`🔤 Determining font scale for ${totalHeight.toFixed(1)}mm in ${availableHeight}mm available`);
+		
+		const fontScales = [
+			{ name: 'Large', titleSize: 11, headerSize: 10, cardSize: 9, scale: 1.0 },
+			{ name: 'Medium', titleSize: 10, headerSize: 9, cardSize: 8, scale: 0.9 },
+			{ name: 'Small', titleSize: 9, headerSize: 8, cardSize: 7, scale: 0.8 },
+			{ name: 'XSmall', titleSize: 8, headerSize: 7, cardSize: 6, scale: 0.7 }
+		];
+		
+		// Find the largest scale that fits
+		for (const scale of fontScales) {
+			const scaledHeight = totalHeight * scale.scale;
+			const efficiency = (scaledHeight / availableHeight * 100);
+			
+			console.log(`   ${scale.name}: ${scaledHeight.toFixed(1)}mm (${efficiency.toFixed(1)}% of available)`);
+			
+			if (scaledHeight <= availableHeight) {
+				console.log(`   ✅ Selected: ${scale.name} scale`);
+				return {
+					...scale,
+					efficiency: efficiency.toFixed(1) + '%'
+				};
+			}
+		}
+		
+		// If nothing fits, use smallest scale
+		const smallest = fontScales[fontScales.length - 1];
+		console.log(`   ⚠️ Forced to use: ${smallest.name} scale (exceeds space)`);
+		return {
+			...smallest,
+			efficiency: 'forced (exceeds space)'
+		};
+	}
+
+	/**
+	 * Apply font scaling to section heights
+	 */
+	applyFontScaling(sections, scale) {
+		console.log(`📐 Applying ${scale}x scaling to sections`);
+		
+		return sections.map(section => ({
+			...section,
+			height: section.height * scale,
+			headerHeight: section.headerHeight * scale,
+			cardHeight: section.cardHeight * scale
+		}));
+	}
+
+	/**
+	 * Waterfall distribution across 4 columns
+	 */
+	distributeToFourColumnsWaterfall(sections, maxColumnHeight) {
+		console.log(`📊 Waterfall distribution (max ${maxColumnHeight}mm per column)`);
+		
+		const columns = [[], [], [], []];
+		const columnHeights = [0, 0, 0, 0];
+		
+		let currentColumn = 0;
+		let currentHeight = 0;
+		
+		for (const section of sections) {
+			const sectionHeight = section.height;
+			
+			// Check if section fits in current column
+			if (currentHeight + sectionHeight > maxColumnHeight && currentColumn < 3) {
+				console.log(`↪️ Column ${currentColumn + 1} full (${currentHeight.toFixed(1)}mm), moving to column ${currentColumn + 2}`);
+				currentColumn++;
+				currentHeight = 0;
+			}
+			
+			// Add section to current column
+			columns[currentColumn].push(section);
+			currentHeight += sectionHeight;
+			
+			console.log(`📦 Added "${section.header}" to column ${currentColumn + 1}, height: ${currentHeight.toFixed(1)}mm`);
+		}
+		
+		// Log distribution results
+		columns.forEach((colSections, index) => {
+			const colHeight = colSections.reduce((sum, section) => sum + section.height, 0);
+			const utilization = (colHeight / maxColumnHeight * 100).toFixed(1);
+			console.log(`✅ Column ${index + 1}: ${colSections.length} sections, ${colHeight.toFixed(1)}mm (${utilization}% utilized)`);
+		});
+		
+		return columns;
+	}
+	
 	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
 		console.log('🎯 Rendering decklist with proven 4-column layout');
-
-		// Parse decklist structure from DOM
+		
+		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
 		if (!decklistData.sections || decklistData.sections.length === 0) {
+			console.log('⚠️ No decklist sections found');
 			return startY;
 		}
-
-		// Start at provided Y position (respects paragraph placement)
-		let currentY = startY;
-		const halfPageHeight = pageHeight / 2;
-		const availableHeight = Math.min(halfPageHeight, pageHeight - currentY - 15);
-
-		// Calculate base heights and scale fonts to fit half-page
+		
+		console.log(`📋 Decklist parsed: ${decklistData.sections.length} sections, ${decklistData.sections.reduce((sum, s) => sum + s.cards.length, 0)} cards`);
+		
+		// PHASE 2: Calculate metrics and check placement
+		const HALF_PAGE = 148; // mm
+		const TITLE_HEIGHT = 8; // mm
+		const AVAILABLE_COLUMN_HEIGHT = HALF_PAGE - TITLE_HEIGHT;
+		
+		console.log(`📐 Space allocation: ${AVAILABLE_COLUMN_HEIGHT}mm for columns + ${TITLE_HEIGHT}mm for title = ${HALF_PAGE}mm total`);
+		
+		// Calculate base heights
 		const baseHeights = this.calculateOptimizedSectionHeights(decklistData.sections);
-		const totalBaseHeight = baseHeights.reduce((sum, section) => sum + section.height, 0) + 15;
-		const fontScale = this.determineOptimalFontScale(totalBaseHeight, availableHeight);
+		const totalBaseHeight = baseHeights.reduce((sum, section) => sum + section.height, 0);
+		
+		console.log(`📏 Base content height: ${totalBaseHeight.toFixed(1)}mm (target: ≤${AVAILABLE_COLUMN_HEIGHT}mm)`);
+		
+		// PHASE 3: Determine optimal font scale
+		const fontScale = this.determineOptimalFontScale(totalBaseHeight, AVAILABLE_COLUMN_HEIGHT);
+		console.log(`🔤 Font scale selected: ${fontScale.name} (${fontScale.scale}x)`);
+		
+		// Apply scaling
 		const scaledSections = this.applyFontScaling(baseHeights, fontScale.scale);
-
-		// Check if decklist needs new page
-		const totalScaledHeight = scaledSections.reduce((sum, section) => sum + section.height, 0) + (15 * fontScale.scale);
-		if (totalScaledHeight > availableHeight) {
+		const totalScaledHeight = scaledSections.reduce((sum, section) => sum + section.height, 0);
+		const totalDecklistHeight = totalScaledHeight + TITLE_HEIGHT;
+		
+		console.log(`📐 Final dimensions: ${totalScaledHeight.toFixed(1)}mm columns + ${TITLE_HEIGHT}mm title = ${totalDecklistHeight.toFixed(1)}mm total`);
+		
+		// PHASE 4: Check placement on current page
+		const spaceToBottom = pageHeight - startY;
+		console.log(`📍 Placement check: ${spaceToBottom.toFixed(1)}mm available to bottom of page`);
+		
+		if (spaceToBottom < totalDecklistHeight) {
+			console.log(`📄 Insufficient space (${spaceToBottom.toFixed(1)}mm < ${totalDecklistHeight.toFixed(1)}mm), starting on new page`);
 			pdf.addPage();
-			currentY = 15;
+			startY = 15; // Top margin of new page
+		} else {
+			console.log(`✅ Decklist fits at Y: ${startY}mm (${spaceToBottom.toFixed(1)}mm available)`);
 		}
-
-		// 4-column layout with consistent gutter spacing
-		const columnWidth = (availableWidth - 15) / 4;
-		const columnGutter = 5;
-
-		// Render decklist title
+		
+		// PHASE 5: Waterfall column distribution
+		const columns = this.distributeToFourColumnsWaterfall(scaledSections, AVAILABLE_COLUMN_HEIGHT);
+		
+		// PHASE 6: Render decklist
+		let currentY = startY;
+		
+		// Render title
 		if (decklistData.title) {
 			pdf.setFontSize(fontScale.titleSize);
 			pdf.setFont(undefined, 'bold');
 			pdf.text(decklistData.title, startX + availableWidth / 2, currentY, { align: 'center' });
-			currentY += 8 * fontScale.scale;
+			currentY += 8;
+			console.log(`📝 Rendered title: "${decklistData.title}" at Y: ${startY}mm`);
 		}
-
-		// Distribute sections across 4 columns with orphan protection
-		const columns = [[], [], [], []];
-		const columnHeights = [0, 0, 0, 0];
-
-		scaledSections.forEach(section => {
-			let bestColumn = -1;
-			let bestSpace = Infinity;
-
-			// Find column that fits entire section without creating orphans
-			for (let i = 0; i < 4; i++) {
-				const spaceLeft = availableHeight - columnHeights[i];
-				const fitsWithoutOrphan = spaceLeft >= (section.headerHeight + section.cardHeight);
-				
-				if (fitsWithoutOrphan && spaceLeft >= section.height && spaceLeft < bestSpace) {
-					bestColumn = i;
-					bestSpace = spaceLeft;
-				}
-			}
-
-			// If no perfect fit, find column that fits at least header + one card
-			if (bestColumn === -1) {
-				for (let i = 0; i < 4; i++) {
-					const spaceLeft = availableHeight - columnHeights[i];
-					const fitsMinimally = spaceLeft >= (section.headerHeight + section.cardHeight);
-					
-					if (fitsMinimally && spaceLeft < bestSpace) {
-						bestColumn = i;
-						bestSpace = spaceLeft;
-					}
-				}
-			}
-
-			// If still no fit, use column with most space
-			if (bestColumn === -1) {
-				bestColumn = columnHeights.indexOf(Math.min(...columnHeights));
-			}
-
-			columns[bestColumn].push(section);
-			columnHeights[bestColumn] += section.height;
-		});
-
+		
+		// 4-column layout with consistent gutter spacing
+		const columnWidth = (availableWidth - 15) / 4; // 15mm total gutter
+		const columnGutter = 5;
+		
 		// Render all 4 columns
 		let maxColumnY = currentY;
-
+		
 		for (let columnIndex = 0; columnIndex < 4; columnIndex++) {
 			const columnSections = columns[columnIndex];
-			if (columnSections.length === 0) continue;
-
+			if (columnSections.length === 0) {
+				console.log(`➖ Column ${columnIndex + 1}: empty`);
+				continue;
+			}
+			
 			const columnX = startX + (columnIndex * (columnWidth + columnGutter));
 			let columnY = currentY;
-
-			columnSections.forEach(section => {
-				// Render section header
+			
+			console.log(`📊 Column ${columnIndex + 1}: ${columnSections.length} sections`);
+			
+			columnSections.forEach((section, sectionIndex) => {
+				// Render section header with orphan protection
 				pdf.setFontSize(fontScale.headerSize);
 				pdf.setFont(undefined, 'bold');
+				
 				const headerLines = pdf.splitTextToSize(section.header, columnWidth - 2);
 				
 				headerLines.forEach((line, lineIndex) => {
@@ -973,35 +1130,53 @@ class ExportManager {
 				});
 				
 				columnY += headerLines.length * fontScale.headerSize * 0.35 + 1;
-
-				// Render card list
+				console.log(`   📝 Section "${section.header}" header rendered`);
+				
+				// Render at least one card line for orphan protection
 				pdf.setFontSize(fontScale.cardSize);
 				pdf.setFont(undefined, 'normal');
-
-				section.cards.forEach(cardText => {
+				
+				if (section.cards.length > 0) {
+					const firstCard = section.cards[0];
+					const lines = pdf.splitTextToSize(firstCard, columnWidth - 2);
+					
+					lines.forEach(line => {
+						pdf.text(line, columnX, columnY);
+						columnY += fontScale.cardSize * 0.3;
+					});
+					
+					console.log(`   ✓ First card rendered (orphan protection)`);
+				}
+				
+				// Render remaining cards
+				for (let i = 1; i < section.cards.length; i++) {
+					const cardText = section.cards[i];
 					const lines = pdf.splitTextToSize(cardText, columnWidth - 2);
 					
 					lines.forEach(line => {
 						pdf.text(line, columnX, columnY);
 						columnY += fontScale.cardSize * 0.3;
 					});
-				});
-
+				}
+				
 				columnY += 1; // Section spacing
+				console.log(`   📋 ${section.cards.length} cards rendered`);
 			});
-
+			
 			maxColumnY = Math.max(maxColumnY, columnY);
+			console.log(`✅ Column ${columnIndex + 1} complete, height: ${(columnY - currentY).toFixed(1)}mm`);
 		}
-
-		// Smart content continuation - prevent huge gaps
+		
+		// PHASE 7: Determine content continuation
 		const spaceRemaining = pageHeight - maxColumnY - 15;
+		console.log(`📄 Content continuation: ${spaceRemaining.toFixed(1)}mm remaining`);
 		
 		if (spaceRemaining < 20) {
-			// Not enough space for meaningful content, start new page
-			return pageHeight;
+			console.log(`⏩ Minimal space (${spaceRemaining.toFixed(1)}mm), starting next content on new page`);
+			return pageHeight; // Signal to start new page
 		} else {
-			// Continue content with small gap
-			return maxColumnY + 5;
+			console.log(`✅ Continuing content at Y: ${maxColumnY + 5}mm`);
+			return maxColumnY + 5; // Small gap, then continue
 		}
 	}
 
