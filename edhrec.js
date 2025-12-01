@@ -1,3 +1,4 @@
+// VERSION:1
 // EDHREC Data Extraction Module - Real Implementation
 class EDHRECExtractor {
     constructor() {
