@@ -1,3 +1,4 @@
+// VERSION:1
 // Scryfall API Integration Module
 class ScryfallAPI {
     constructor() {
