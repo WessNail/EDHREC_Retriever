@@ -1,3 +1,4 @@
+// VERSION:1
 // Card Display Engine - Clean Version
 class CardDisplayEngine {
     constructor() {
