@@ -1162,7 +1162,7 @@ class ExportManager {
 	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
 		    console.log('🚨🚨🚨 NEW RENDERDECKLISTASTEXT CALLED 🚨🚨🚨');
 			console.log('This should be VERY visible in console');
-			console.log(`📊 COLUMN SPACE DEBUG: received availableHeight=${availableHeight}mm`);
+			console.log(`📊 COLUMN SPACE DEBUG: received availableHeight=${pageHeight}mm`);
 			console.log(`📊 Should be: 140mm PER COLUMN × 4 columns = 560mm total`);
 			console.log(`📊 Current logic uses: ${availableHeight}mm as target`);
 					
@@ -1822,3 +1822,4 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
+
