@@ -1,4 +1,4 @@
-// VERSION:9
+// VERSION:8
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -1164,7 +1164,7 @@ class ExportManager {
 			console.log('This should be VERY visible in console');
 			console.log(`📊 COLUMN SPACE DEBUG: received availableHeight=${pageHeight}mm`);
 			console.log(`📊 Should be: 140mm PER COLUMN × 4 columns = 560mm total`);
-			console.log(`📊 Current logic uses: ${availableHeight}mm as target`);
+			console.log(`📊 Current logic uses: ${pageHeight}mm as target`);
 					
 		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
@@ -1822,5 +1822,3 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
-
-
