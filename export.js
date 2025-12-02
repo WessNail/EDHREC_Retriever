@@ -1,4 +1,4 @@
-// VERSION:12
+// VERSION:14
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -591,7 +591,7 @@ class ExportManager {
 	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
 		console.log('📄 Starting Upgrade Guide PDF');
-			
+						
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid) throw new Error('No content available');
 
@@ -609,6 +609,8 @@ class ExportManager {
 			let currentY = margin;
 			let currentPage = 1;
 			const MAX_PAGES = 20;
+			
+			let previousRenderY = currentY; // Track previous render position
 			
 			// SIMPLE HEADER
 			const header = cardGrid.querySelector('.upgrade-guide-header');
@@ -658,8 +660,19 @@ class ExportManager {
 				// ESTIMATE HEIGHT
 				let elementHeight = this.estimateElementHeight(element);
 				
+				// ===== ADD DIAGNOSTIC HERE =====
+				console.log(`📐 ELEMENT HEIGHT ESTIMATION - LINE ~661`);
+				console.log(`   Element: ${element.className}`);
+				console.log(`   estimateElementHeight result: ${this.estimateElementHeight(element)}mm`);
+				console.log(`   currentY before check: ${currentY}mm`);
+				console.log(`   Sum: ${currentY + elementHeight}mm`);
+				console.log(`   pageHeight - margin: ${pageHeight - margin}mm`);
+				console.log(`   Would trigger page break: ${currentY + this.estimateElementHeight(element) > pageHeight - margin}`);
+				// ===== END DIAGNOSTIC =====
+				
 				// CHECK PAGE BREAK
 				if (currentY + elementHeight > pageHeight - margin) {
+					console.log(`📄 PAGE BREAK TRIGGERED! Resetting currentY to ${margin}mm`);
 					pdf.addPage();
 					currentPage++;
 					currentY = margin;
@@ -668,6 +681,23 @@ class ExportManager {
 				
 				// RENDER BASED ON TYPE
 				if (element.classList.contains('guide-cardlist')) {
+					
+					// ===== ADD DIAGNOSTIC HERE =====
+					console.log(`🔍 DECKLIST BLOCK ENTERED - LINE ~681`);
+					console.log(`   currentY value on entry: ${currentY}mm`);
+					console.log(`   previousRenderY: ${previousRenderY}mm`);
+					console.log(`   margin value: ${margin}mm`);
+					console.log(`   currentY === margin: ${currentY === margin}`);
+					console.log(`   currentY === previousRenderY: ${currentY === previousRenderY}`);
+					console.log(`   Previous element: ${children[i-1]?.className || 'none'}`);
+					
+					if (currentY === margin) {
+						console.log(`❌❌❌ BUG CONFIRMED: currentY reset to margin`);
+						console.log(`   Previous element was: ${children[i-1]?.className || 'none'}`);
+						console.log(`   Previous element rendered at: ${previousRenderY}mm`); // Need to track this
+					}
+					// ===== END DIAGNOSTIC =====
+					
 					const DECKLIST_MAX_HEIGHT = 148; // Half-page including title
 					const spaceAvailable = pageHeight - currentY - 15; // 15mm bottom margin
 					
@@ -697,7 +727,11 @@ class ExportManager {
 					} else {
 						console.log(`✅ FITS ON CURRENT PAGE: ${currentY + 148}mm ≤ ${pageHeight - 15}mm`);
 						// Continue at currentY
-					}//////////////////////////////////////
+					}
+					console.log(`🔴 BUG CHECK: currentY before renderDecklistAsText = ${currentY}mm`);
+					console.log(`🔴 Should be: ${93.35}mm (previous paragraph end)`);
+					console.log(`🔴 But renderDecklistAsText receives: startY=15mm`);
+					//////////////////////////////////////
 					
 					// Render decklist
 					const decklistEndY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
@@ -719,6 +753,11 @@ class ExportManager {
 					
 					// Position for following content (5mm gap after decklist)
 					currentY = decklistEndY + 5;
+					previousRenderY = currentY;
+					// ===== ADD THIS RIGHT AFTER =====
+					previousRenderY = currentY; // Update tracker
+					console.log(`📊 RENDER TRACKER: decklist rendered, previousRenderY now: ${previousRenderY}mm`);
+					// ===== END ADDITION =====
 					console.log(`➡️ Continuing content at Y: ${currentY}mm`);
 				}
 			else if (element.classList.contains('card-grid')) {
@@ -747,6 +786,8 @@ class ExportManager {
 				else {
 					// REGULAR TEXT
 					currentY = this.renderTextElement(pdf, element, margin, currentY, availableWidth);
+					previousRenderY = currentY; // Update tracker
+					console.log(`📊 RENDER TRACKER: text rendered, previousRenderY now: ${previousRenderY}mm`);
 				}
 				
 				currentY += 5;
@@ -1179,6 +1220,8 @@ class ExportManager {
 			console.log(`   Available width: ${210 - 30}mm = 180mm`);
 			console.log(`   4 columns + 3 gutters @ 5mm each = 15mm gutter total`);
 			console.log(`   Column width: (180mm - 15mm) ÷ 4 = ${(180 - 15) / 4}mm`);
+			console.log(`🎯 ACTUAL START Y: ${startY}mm (received parameter)`);
+			console.log(`🎯 If startY=15, bug in parent method!`);
 								
 		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
@@ -1812,4 +1855,3 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
-
