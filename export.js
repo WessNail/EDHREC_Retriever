@@ -1,4 +1,4 @@
-// VERSION:5
+// VERSION:4
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -1146,7 +1146,7 @@ class ExportManager {
 		console.log(`📏 Base content height: ${totalBaseHeight.toFixed(1)}mm (target: ≤${AVAILABLE_COLUMN_HEIGHT}mm)`);
 		
 		// PHASE 3: Determine optimal font scale
-		const TOTAL_COLUMN_SPACE = 140 * 4; // 140mm per column × 4 columns
+		const TOTAL_COLUMN_SPACE = 140 * 4 = 560mm; // 140mm per column × 4 columns
 		const fontScale = this.determineOptimalFontScale(totalBaseHeight, TOTAL_COLUMN_SPACE);
 		console.log(`🔤 Font scale selected: ${fontScale.name} (${fontScale.scale}x)`);
 		
@@ -1233,7 +1233,7 @@ class ExportManager {
 					
 					lines.forEach(line => {
 						pdf.text(line, columnX, columnY);
-						columnY += fontScale.cardSize * 0.3;
+						columnY += fontScale.cardSize * 0.3 + 0.5;
 					});
 					
 					console.log(`   ✓ First card rendered (orphan protection)`);
@@ -1246,7 +1246,7 @@ class ExportManager {
 					
 					lines.forEach(line => {
 						pdf.text(line, columnX, columnY);
-						columnY += fontScale.cardSize * 0.3;
+						columnY += fontScale.cardSize * 0.3 + 0.5;
 					});
 				}
 				
@@ -1771,6 +1771,3 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
-
-
-
