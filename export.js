@@ -1190,9 +1190,13 @@ class ExportManager {
 		console.log(`📋 Decklist parsed: ${decklistData.sections.length} sections, ${decklistData.sections.reduce((sum, s) => sum + s.cards.length, 0)} cards`);
 		
 		// PHASE 2: Calculate metrics and check placement
-		const HALF_PAGE = 148; // mm
+		const PAGE_HEIGHT = 297; // mm
+		const MARGIN_TOP = 15; // mm
+		const MARGIN_BOTTOM = 15; // mm
+		const AVAILABLE_PAGE_HEIGHT = PAGE_HEIGHT - MARGIN_TOP - MARGIN_BOTTOM; // 267mm
+		const HALF_PAGE = AVAILABLE_PAGE_HEIGHT / 2; // 133.5mm
 		const TITLE_HEIGHT = 8; // mm
-		const AVAILABLE_COLUMN_HEIGHT = HALF_PAGE - TITLE_HEIGHT;
+		const AVAILABLE_COLUMN_HEIGHT = HALF_PAGE - TITLE_HEIGHT; // 125.5mm per column
 		
 		console.log(`📐 Space allocation: ${AVAILABLE_COLUMN_HEIGHT}mm for columns + ${TITLE_HEIGHT}mm for title = ${HALF_PAGE}mm total`);
 		
