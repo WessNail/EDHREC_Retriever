@@ -1,4 +1,4 @@
-// VERSION:3
+// VERSION:4
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -1146,7 +1146,8 @@ class ExportManager {
 		console.log(`📏 Base content height: ${totalBaseHeight.toFixed(1)}mm (target: ≤${AVAILABLE_COLUMN_HEIGHT}mm)`);
 		
 		// PHASE 3: Determine optimal font scale
-		const fontScale = this.determineOptimalFontScale(totalBaseHeight, AVAILABLE_COLUMN_HEIGHT);
+		const TOTAL_COLUMN_SPACE = 140 * 4 = 560mm; // 140mm per column × 4 columns
+		const fontScale = this.determineOptimalFontScale(totalBaseHeight, TOTAL_COLUMN_SPACE);
 		console.log(`🔤 Font scale selected: ${fontScale.name} (${fontScale.scale}x)`);
 		
 		// Apply scaling
@@ -1770,3 +1771,4 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
+
