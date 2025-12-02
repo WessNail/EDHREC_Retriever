@@ -1,4 +1,4 @@
-// VERSION:10
+// VERSION:11
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -591,9 +591,7 @@ class ExportManager {
 	 */
 	async generateUpgradeGuidePDF(filename = 'upgrade_guide.pdf') {
 		console.log('📄 Starting Upgrade Guide PDF');
-		
-		this.setupDecklistDiagnostics();
-		
+			
 		const cardGrid = document.getElementById('cardGrid');
 		if (!cardGrid) throw new Error('No content available');
 
@@ -1165,7 +1163,23 @@ class ExportManager {
 			console.log(`📊 COLUMN SPACE DEBUG: received availableHeight=${pageHeight}mm`);
 			console.log(`📊 Should be: 140mm PER COLUMN × 4 columns = 560mm total`);
 			console.log(`📊 Current logic uses: ${pageHeight}mm as target`);
-					
+			console.log(`📐 MARGIN CALCULATION DIAGNOSTIC:`);
+			console.log(`   Page height: ${pageHeight}mm`);
+			console.log(`   Top margin: 15mm`);
+			console.log(`   Bottom margin: 15mm`);
+			console.log(`   Available page height: ${pageHeight - 30}mm`);
+			console.log(`   Half-page target: ${(pageHeight - 30) / 2}mm`);
+			console.log(`   Title height: 8mm`);
+			console.log(`   Available per column: ${((pageHeight - 30) / 2) - 8}mm`);
+			console.log(`   CURRENT CODE USES: 140mm per column (WRONG!)`);
+			console.log(`📐 COLUMN WIDTH DIAGNOSTIC:`);
+			console.log(`   Page width: 210mm`);
+			console.log(`   Left margin: 15mm`);
+			console.log(`   Right margin: 15mm`);
+			console.log(`   Available width: ${210 - 30}mm = 180mm`);
+			console.log(`   4 columns + 3 gutters @ 5mm each = 15mm gutter total`);
+			console.log(`   Column width: (180mm - 15mm) ÷ 4 = ${(180 - 15) / 4}mm`);
+								
 		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
 		if (!decklistData.sections || decklistData.sections.length === 0) {
@@ -1204,7 +1218,7 @@ class ExportManager {
 		const spaceToBottom = pageHeight - startY;
 		console.log(`📍 Placement check: ${spaceToBottom.toFixed(1)}mm available to bottom of page`);
 		
-		if (spaceToBottom < totalDecklistHeight) {
+		if (spaceToBottom < HALF_PAGE) {
 			console.log(`📄 Insufficient space (${spaceToBottom.toFixed(1)}mm < ${totalDecklistHeight.toFixed(1)}mm), starting on new page`);
 			pdf.addPage();
 			startY = 15; // Top margin of new page
@@ -1790,36 +1804,7 @@ class ExportManager {
 		
 		return y + totalHeight + 2; // Minimal spacing after
 	}
-	
-	// TEMPORARY DIAGNOSTIC - Add at TOP of ExportManager class
-	setupDecklistDiagnostics() {
-		console.log('🔍 DECKLIST DIAGNOSTICS ENABLED');
-		
-		// Override the renderDecklistAsText to trace calls
-		const originalMethod = this.renderDecklistAsText;
-		
-		this.renderDecklistAsText = function(pdf, element, startX, startY, availableWidth, pageHeight) {
-			console.log('🎯 TRACE: renderDecklistAsText CALLED');
-			console.log('📊 Call details:', {
-				elementClass: element.className,
-				elementTag: element.tagName,
-				startY: startY,
-				availableWidth: availableWidth,
-				pageHeight: pageHeight,
-				caller: new Error().stack.split('\n')[2] // Get caller info
-			});
-			
-			// Check which method is being called
-			const isNewMethod = originalMethod.toString().includes('PHASE 1: Parse decklist structure');
-			console.log(`🔍 Method version: ${isNewMethod ? 'NEW' : 'OLD'}`);
-			
-			return originalMethod.call(this, pdf, element, startX, startY, availableWidth, pageHeight);
-		};
-		
-		console.log('✅ Diagnostics installed - reload page and generate PDF');
-	}
 
 }
 
 window.ExportManager = ExportManager;
-
