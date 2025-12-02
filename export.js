@@ -1,4 +1,4 @@
-// VERSION:14
+// VERSION:15
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -671,12 +671,25 @@ class ExportManager {
 				// ===== END DIAGNOSTIC =====
 				
 				// CHECK PAGE BREAK
-				if (currentY + elementHeight > pageHeight - margin) {
-					console.log(`📄 PAGE BREAK TRIGGERED! Resetting currentY to ${margin}mm`);
-					pdf.addPage();
-					currentPage++;
-					currentY = margin;
-					if (currentPage > MAX_PAGES) break;
+				if (element.classList.contains('guide-cardlist')) {
+					// DECKLISTS: Use half-page height (140mm) instead of estimated height (237.5mm)
+					const DECKLIST_HALF_PAGE_HEIGHT = 140; // Decklists render in half-page 4-column layout
+					if (currentY + DECKLIST_HALF_PAGE_HEIGHT > pageHeight - margin) {
+						console.log(`📄 DECKLIST needs new page, resetting currentY to ${margin}mm`);
+						pdf.addPage();
+						currentPage++;
+						currentY = margin;
+						if (currentPage > MAX_PAGES) break;
+					}
+				} else {
+					// NON-DECKLISTS: Use normal estimation
+					if (currentY + elementHeight > pageHeight - margin) {
+						console.log(`📄 PAGE BREAK TRIGGERED! Resetting currentY to ${margin}mm`);
+						pdf.addPage();
+						currentPage++;
+						currentY = margin;
+						if (currentPage > MAX_PAGES) break;
+					}
 				}
 				
 				// RENDER BASED ON TYPE
