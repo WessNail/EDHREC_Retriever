@@ -1,4 +1,4 @@
-// VERSION:7
+// VERSION:8
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
