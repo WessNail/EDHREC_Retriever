@@ -646,6 +646,14 @@ class ExportManager {
 				
 				const element = children[i];
 				
+				// DIAGNOSTIC: Check element grouping
+				console.log(`📋 CONTENT GROUPING [${i}]:`);
+				console.log(`   Element: ${element.className || element.tagName}`);
+				console.log(`   Is decklist: ${element.classList.contains('guide-cardlist')}`);
+				console.log(`   Prev element: ${children[i-1]?.className || children[i-1]?.tagName}`);
+				console.log(`   Prev is text: ${children[i-1]?.classList?.contains('guide-paragraph-group')}`);
+				console.log(`   Text content preview: ${element.textContent?.substring(0, 50)}...`);
+							
 				// Skip header we already processed
 				if (element.classList.contains('upgrade-guide-header')) continue;
 				
@@ -676,8 +684,40 @@ class ExportManager {
 						console.log(`✅ Decklist fits at current position (${spaceAvailable.toFixed(1)}mm available)`);
 					}
 					
+					// DIAGNOSTIC: Check actual placement//
+					console.log(`📐 DECKLIST PLACEMENT DIAGNOSTIC:`);
+					console.log(`   Previous content ended at Y: ${currentY}mm`);
+					console.log(`   Page height: ${pageHeight}mm`);
+					console.log(`   Space to bottom: ${pageHeight - currentY - 15}mm`);
+					console.log(`   Decklist needs: 148mm total height`);
+
+					// Check if decklist fits on current page
+					if (currentY + 148 > pageHeight - 15) {
+						console.log(`📄 NEEDS NEW PAGE: ${currentY + 148}mm > ${pageHeight - 15}mm`);
+						pdf.addPage();
+						currentY = margin;
+					} else {
+						console.log(`✅ FITS ON CURRENT PAGE: ${currentY + 148}mm ≤ ${pageHeight - 15}mm`);
+						// Continue at currentY
+					}//////////////////////////////////////
+					
 					// Render decklist
 					const decklistEndY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
+					
+					// After renderDecklistAsText call://
+					const newY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
+					console.log(`🔁 renderDecklistAsText returned: ${newY}mm`);
+					console.log(`🔁 Parent expected continuation at: ${currentY + 5}mm`);
+					currentY = newY + 5;
+					//////////////////////////////////////
+					
+					// Pre currentY assignment DIAGNOSTIC ONLY - NO VARIABLE MODIFICATION/////
+					console.log(`📥 DECKLIST RETURN DIAGNOSTIC:`);
+					console.log(`   renderDecklistAsText returned: ${decklistEndY}mm`);
+					console.log(`   Previous currentY was: ${currentY}mm`);
+					console.log(`   Difference: ${decklistEndY - currentY}mm`);
+					console.log(`   If decklistEndY (${decklistEndY}) > pageHeight (${pageHeight} - 20 = ${pageHeight - 20}): ${decklistEndY > (pageHeight - 20)}`);
+					///////////////////////////////////////////////////
 					
 					// Position for following content (5mm gap after decklist)
 					currentY = decklistEndY + 5;
@@ -1122,7 +1162,10 @@ class ExportManager {
 	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
 		    console.log('🚨🚨🚨 NEW RENDERDECKLISTASTEXT CALLED 🚨🚨🚨');
 			console.log('This should be VERY visible in console');
-		
+			console.log(`📊 COLUMN SPACE DEBUG: received availableHeight=${availableHeight}mm`);
+			console.log(`📊 Should be: 140mm PER COLUMN × 4 columns = 560mm total`);
+			console.log(`📊 Current logic uses: ${availableHeight}mm as target`);
+					
 		// PHASE 1: Parse decklist structure
 		const decklistData = this.parseDecklistStructure(element);
 		if (!decklistData.sections || decklistData.sections.length === 0) {
@@ -1253,6 +1296,14 @@ class ExportManager {
 				columnY += 1; // Section spacing
 				console.log(`   📋 ${section.cards.length} cards rendered`);
 			});
+			
+			//DIAGNOSTIC CODE//
+			console.log(`🔚 renderDecklistAsText RETURNING: ${Math.max(maxColumnY, startY)}mm`);
+			console.log(`🔚 Max column Y: ${maxColumnY}mm, Start Y: ${startY}mm`);
+			console.log(`   startY (passed): ${startY}mm`);
+			console.log(`   Returning: ${Math.max(maxColumnY, startY)}mm`);
+			console.log(`   Should continue at: ${Math.max(maxColumnY, startY) + 5}mm`);
+			///////////////////
 			
 			maxColumnY = Math.max(maxColumnY, columnY);
 			console.log(`✅ Column ${columnIndex + 1} complete, height: ${(columnY - currentY).toFixed(1)}mm`);
@@ -1771,5 +1822,3 @@ class ExportManager {
 }
 
 window.ExportManager = ExportManager;
-
-
