@@ -1,4 +1,4 @@
-// VERSION:2
+// VERSION:3
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -662,8 +662,27 @@ class ExportManager {
 				
 				// RENDER BASED ON TYPE
 				if (element.classList.contains('guide-cardlist')) {
-					currentY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
-				} 
+					const DECKLIST_MAX_HEIGHT = 148; // Half-page including title
+					const spaceAvailable = pageHeight - currentY - 15; // 15mm bottom margin
+					
+					console.log(`📄 Decklist placement check: ${spaceAvailable.toFixed(1)}mm available at Y: ${currentY}mm`);
+					
+					if (spaceAvailable < DECKLIST_MAX_HEIGHT) {
+						// Not enough space for decklist, start new page
+						console.log(`📄 Insufficient space (${spaceAvailable.toFixed(1)}mm < ${DECKLIST_MAX_HEIGHT}mm), starting new page`);
+						pdf.addPage();
+						currentY = margin; // Reset to top margin
+					} else {
+						console.log(`✅ Decklist fits at current position (${spaceAvailable.toFixed(1)}mm available)`);
+					}
+					
+					// Render decklist
+					const decklistEndY = await this.renderDecklistAsText(pdf, element, margin, currentY, availableWidth, pageHeight);
+					
+					// Position for following content (5mm gap after decklist)
+					currentY = decklistEndY + 5;
+					console.log(`➡️ Continuing content at Y: ${currentY}mm`);
+				}
 			else if (element.classList.contains('card-grid')) {
 				// ROW-BY-ROW CARD PLACEMENT
 				const cardFrames = Array.from(element.querySelectorAll('.card-frame'));
@@ -1000,45 +1019,106 @@ class ExportManager {
 		}));
 	}
 
-	/**
-	 * Waterfall distribution across 4 columns
-	 */
 	distributeToFourColumnsWaterfall(sections, maxColumnHeight) {
-		console.log(`📊 Waterfall distribution (max ${maxColumnHeight}mm per column)`);
+		console.log(`📊 Waterfall distribution (${maxColumnHeight}mm max per column)`);
 		
 		const columns = [[], [], [], []];
 		const columnHeights = [0, 0, 0, 0];
 		
 		let currentColumn = 0;
-		let currentHeight = 0;
 		
 		for (const section of sections) {
 			const sectionHeight = section.height;
 			
-			// Check if section fits in current column
-			if (currentHeight + sectionHeight > maxColumnHeight && currentColumn < 3) {
-				console.log(`↪️ Column ${currentColumn + 1} full (${currentHeight.toFixed(1)}mm), moving to column ${currentColumn + 2}`);
+			// Try to fit in current column
+			if (columnHeights[currentColumn] + sectionHeight <= maxColumnHeight) {
+				// Fits in current column
+				columns[currentColumn].push(section);
+				columnHeights[currentColumn] += sectionHeight;
+				console.log(`📦 Added "${section.header}" to column ${currentColumn + 1}, height: ${columnHeights[currentColumn].toFixed(1)}mm`);
+			} 
+			// Try next column
+			else if (currentColumn < 3) {
+				// Move to next column
 				currentColumn++;
-				currentHeight = 0;
+				
+				if (columnHeights[currentColumn] + sectionHeight <= maxColumnHeight) {
+					columns[currentColumn].push(section);
+					columnHeights[currentColumn] += sectionHeight;
+					console.log(`↪️ Moved "${section.header}" to column ${currentColumn + 1}, height: ${columnHeights[currentColumn].toFixed(1)}mm`);
+				} else {
+					// Even next column can't fit, try to fit anyway (orphan protection will handle)
+					console.log(`⚠️ Section "${section.header}" (${sectionHeight.toFixed(1)}mm) too tall for any column, forcing fit`);
+					columns[currentColumn].push(section);
+					columnHeights[currentColumn] += sectionHeight;
+				}
 			}
-			
-			// Add section to current column
-			columns[currentColumn].push(section);
-			currentHeight += sectionHeight;
-			
-			console.log(`📦 Added "${section.header}" to column ${currentColumn + 1}, height: ${currentHeight.toFixed(1)}mm`);
+			// Last column - try to fit or force
+			else {
+				console.log(`⚠️ Last column - forcing "${section.header}" into column 4`);
+				columns[3].push(section);
+				columnHeights[3] += sectionHeight;
+			}
 		}
 		
 		// Log distribution results
 		columns.forEach((colSections, index) => {
-			const colHeight = colSections.reduce((sum, section) => sum + section.height, 0);
+			const colHeight = columnHeights[index];
 			const utilization = (colHeight / maxColumnHeight * 100).toFixed(1);
-			console.log(`✅ Column ${index + 1}: ${colSections.length} sections, ${colHeight.toFixed(1)}mm (${utilization}% utilized)`);
+			console.log(`✅ Column ${index + 1}: ${colSections.length} sections, ${colHeight.toFixed(1)}mm (${utilization}% used)`);
 		});
+		
+		// Check for orphaned headers
+		this.applyOrphanProtection(columns, maxColumnHeight);
 		
 		return columns;
 	}
 	
+	/**
+	 * Prevent orphaned headers at column bottoms
+	 * Moves headers with no cards to next column
+	 */
+	applyOrphanProtection(columns, maxColumnHeight) {
+		console.log('🔍 Applying orphan protection...');
+		
+		for (let colIndex = 0; colIndex < 3; colIndex++) { // Don't check last column
+			const column = columns[colIndex];
+			if (column.length === 0) continue;
+			
+			const lastSection = column[column.length - 1];
+			
+			// If last section has cards and header might be orphaned
+			if (lastSection && lastSection.cards && lastSection.cards.length > 0) {
+				const estimatedHeight = lastSection.headerHeight + (lastSection.cards.length * lastSection.cardHeight);
+				
+				// Check if adding just one card would exceed column height
+				const spaceForHeaderOnly = maxColumnHeight - 
+					(this.calculateColumnHeight(columns[colIndex].slice(0, -1)) + lastSection.headerHeight);
+				
+				const spaceForHeaderPlusOneCard = maxColumnHeight - 
+					(this.calculateColumnHeight(columns[colIndex].slice(0, -1)) + 
+					 lastSection.headerHeight + lastSection.cardHeight);
+				
+				// If header fits but first card doesn't
+				if (spaceForHeaderOnly >= 0 && spaceForHeaderPlusOneCard < 0) {
+					console.log(`⚠️ Orphan detected in column ${colIndex + 1}: "${lastSection.header}"`);
+					
+					// Move entire section to next column
+					column.pop();
+					columns[colIndex + 1].unshift(lastSection); // Add to start of next column
+					console.log(`   ↪️ Moved to column ${colIndex + 2}`);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Calculate total height of sections in a column
+	 */
+	calculateColumnHeight(sections) {
+		return sections.reduce((sum, section) => sum + section.height, 0);
+	}
+		
 	renderDecklistAsText(pdf, element, startX, startY, availableWidth, pageHeight) {
 		    console.log('🚨🚨🚨 NEW RENDERDECKLISTASTEXT CALLED 🚨🚨🚨');
 			console.log('This should be VERY visible in console');
@@ -1089,7 +1169,13 @@ class ExportManager {
 		}
 		
 		// PHASE 5: Waterfall column distribution
-		const columns = this.distributeToFourColumnsWaterfall(scaledSections, AVAILABLE_COLUMN_HEIGHT);
+		// EACH COLUMN gets FULL 140mm height (parallel columns, not stacked)
+		const PER_COLUMN_MAX_HEIGHT = AVAILABLE_COLUMN_HEIGHT; // 140mm per column
+		const columns = this.distributeToFourColumnsWaterfall(scaledSections, PER_COLUMN_MAX_HEIGHT);
+
+		// Add diagnostic logging
+		console.log(`📊 Distributing sections across 4 columns, ${PER_COLUMN_MAX_HEIGHT}mm max per column`);
+		console.log(`📊 Total scaled content: ${totalScaledHeight.toFixed(1)}mm across all sections`);
 		
 		// PHASE 6: Render decklist
 		let currentY = startY;
@@ -1210,10 +1296,11 @@ class ExportManager {
 		});
 	}
 
-	/**
-	 * Determine optimal font scale for half-page fit
-	 */
+	// Replace the ENTIRE determineOptimalFontScale method with:
+
 	determineOptimalFontScale(totalHeight, availableHeight) {
+		console.log(`🔤 Determining font scale for ${totalHeight.toFixed(1)}mm in ${availableHeight}mm available`);
+		
 		const fontScales = [
 			{ name: 'Large', titleSize: 11, headerSize: 10, cardSize: 9, scale: 1.0 },
 			{ name: 'Medium', titleSize: 10, headerSize: 9, cardSize: 8, scale: 0.9 },
@@ -1221,12 +1308,15 @@ class ExportManager {
 			{ name: 'XSmall', titleSize: 8, headerSize: 7, cardSize: 6, scale: 0.7 }
 		];
 		
-		// Find the largest scale that fits
+		// Strict constraint: MUST fit in available height
 		for (const scale of fontScales) {
 			const scaledHeight = totalHeight * scale.scale;
 			const efficiency = (scaledHeight / availableHeight * 100);
 			
+			console.log(`   ${scale.name}: ${scaledHeight.toFixed(1)}mm (${efficiency.toFixed(1)}% of available)`);
+			
 			if (scaledHeight <= availableHeight) {
+				console.log(`   ✅ Selected: ${scale.name} scale`);
 				return {
 					...scale,
 					efficiency: efficiency.toFixed(1) + '%'
@@ -1234,11 +1324,12 @@ class ExportManager {
 			}
 		}
 		
-		// If nothing fits, use smallest scale
+		// If nothing fits perfectly, use smallest scale anyway (content will be truncated)
 		const smallest = fontScales[fontScales.length - 1];
+		console.log(`   ⚠️ No scale fits perfectly, using: ${smallest.name} scale (will exceed space)`);
 		return {
 			...smallest,
-			efficiency: 'forced (exceeds space)'
+			efficiency: 'exceeds space'
 		};
 	}
 
