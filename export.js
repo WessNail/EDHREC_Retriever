@@ -1,4 +1,4 @@
-// VERSION:15
+// VERSION:16
 // Export and Import Functions - CLEAN SINGLE IMPLEMENTATION
 class ExportManager {
     constructor() {
@@ -646,6 +646,51 @@ class ExportManager {
 				
 				const element = children[i];
 				
+				// ===== ADD HEADER CHECK LOGIC HERE =====
+				if (element.classList.contains('guide-header') || element.classList.contains('section-header')) {
+					console.log(`🎯 HEADER CHECK: "${element.textContent?.substring(0, 30)}..."`);
+					
+					// Check if this header should stay with next content
+					const nextElement = children[i + 1];
+					if (nextElement && (nextElement.classList.contains('guide-paragraph-group') || 
+									   nextElement.classList.contains('guide-cardlist'))) {
+						
+						const headerHeight = this.estimateElementHeight(element);
+						const nextHeight = this.estimateElementHeight(nextElement);
+						const spaceAvailable = pageHeight - margin - currentY;
+						
+						console.log(`   Space available: ${spaceAvailable}mm`);
+						console.log(`   Header height: ${headerHeight}mm`);
+						console.log(`   Next element (${nextElement.className}) height: ${nextHeight}mm`);
+						
+						// Check if header + at least some content fits
+						const MIN_CONTENT_HEIGHT = 20; // Minimum 20mm of content to stay with header
+						
+						if (spaceAvailable < headerHeight + MIN_CONTENT_HEIGHT) {
+							// Not enough space even for header + minimum content
+							console.log(`⚠️ Not enough space for header + content, moving to new page`);
+							
+							// Check if we should split previous text instead
+							const prevElement = children[i - 1];
+							if (prevElement && prevElement.classList.contains('guide-paragraph-group')) {
+								console.log(`   Previous element is text - could split it`);
+								// For now, just move header to new page
+							}
+							
+							pdf.addPage();
+							currentPage++;
+							currentY = margin;
+							if (currentPage > MAX_PAGES) break;
+						} else if (spaceAvailable < headerHeight + nextHeight) {
+							// Header fits but not all content - this is OK, text will split
+							console.log(`✅ Header fits, content will split across pages`);
+						} else {
+							console.log(`✅ Header + all content fits`);
+						}
+					}
+				}
+				// ===== END HEADER CHECK =====
+	
 				// DIAGNOSTIC: Check element grouping
 				console.log(`📋 CONTENT GROUPING [${i}]:`);
 				console.log(`   Element: ${element.className || element.tagName}`);
@@ -1560,16 +1605,7 @@ class ExportManager {
 		};
 	}
 
-	/**
-	 * Render text content elements as PDF text (headers, paragraphs)
-	 * Uses jsPDF native text methods for clean, scalable rendering
-	 * @param {jsPDF} pdf - PDF document instance
-	 * @param {Element} element - Text DOM element
-	 * @param {number} x - X position in mm
-	 * @param {number} y - Y position in mm
-	 * @param {number} width - Available width in mm
-	 * @returns {number} New Y position after rendering
-	 */
+
 	renderTextElement(pdf, element, x, y, width) {
 		console.log(`📝 Rendering text element: ${element.className}`);
 		
@@ -1600,18 +1636,70 @@ class ExportManager {
 		const maxTextWidth = width - 4; // 4mm padding
 		const lines = pdf.splitTextToSize(text, maxTextWidth);
 		
-		// Calculate total height needed
+		// Calculate line height
 		const lineHeight = fontSize * 0.35; // Convert pt to mm (approximate)
-		const totalHeight = lines.length * lineHeight;
 		
-		// Render each line
+		// Check how many lines fit on current page
+		const spaceAvailable = pageHeight - margin - y;
+		const maxLinesFit = Math.floor(spaceAvailable / lineHeight);
+		
+		if (maxLinesFit < lines.length && maxLinesFit > 0) {
+			// Some lines fit, some need to go to next page
+			console.log(`📄 SPLITTING TEXT: ${lines.length} total lines, ${maxLinesFit} fit on current page`);
+			
+			// Render lines that fit
+			for (let i = 0; i < maxLinesFit; i++) {
+				pdf.text(lines[i], x + 2, y + (i * lineHeight) + lineHeight);
+			}
+			
+			// Store remaining lines for next page
+			element._remainingLines = lines.slice(maxLinesFit);
+			element._fontSize = fontSize;
+			element._isBold = isBold;
+			
+			// Return Y position at bottom of page
+			return pageHeight - margin;
+		} else {
+			// All lines fit or none fit
+			lines.forEach((line, index) => {
+				pdf.text(line, x + 2, y + (index * lineHeight) + lineHeight);
+			});
+			
+			const totalHeight = lines.length * lineHeight;
+			const newY = y + totalHeight + 4; // 4mm spacing after element
+			console.log(`📝 Text rendered, ${lines.length} lines, new Y: ${newY}mm`);
+			return newY;
+		}
+	}
+
+	renderRemainingText(pdf, element, x, y, width) {
+		if (!element._remainingLines || element._remainingLines.length === 0) {
+			return y;
+		}
+		
+		console.log(`📄 Continuing split text: ${element._remainingLines.length} remaining lines`);
+		
+		// Apply stored font settings
+		pdf.setFontSize(element._fontSize);
+		pdf.setFont(undefined, element._isBold ? 'bold' : 'normal');
+		
+		const lineHeight = element._fontSize * 0.35;
+		const lines = element._remainingLines;
+		
+		// Render all remaining lines
 		lines.forEach((line, index) => {
 			pdf.text(line, x + 2, y + (index * lineHeight) + lineHeight);
 		});
 		
-		// Return new Y position
-		const newY = y + totalHeight + 4; // 4mm spacing after element
-		console.log(`📝 Text rendered, ${lines.length} lines, new Y: ${newY}mm`);
+		const totalHeight = lines.length * lineHeight;
+		const newY = y + totalHeight + 4; // 4mm spacing
+		
+		// Clear stored lines
+		delete element._remainingLines;
+		delete element._fontSize;
+		delete element._isBold;
+		
+		console.log(`📝 Continued text rendered, ${lines.length} lines, new Y: ${newY}mm`);
 		return newY;
 	}
 
