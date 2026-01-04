@@ -1,4 +1,4 @@
-// VERSION:1
+// VERSION:2
 // EDHREC Data Extraction Module - Real Implementation
 class EDHRECExtractor {
     constructor() {
@@ -330,3 +330,4 @@ async function extractEDHRECData(commanderName) {
 }
 
 window.extractEDHRECData = extractEDHRECData;
+
