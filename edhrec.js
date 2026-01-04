@@ -11,61 +11,75 @@ class EDHRECExtractor {
         ];
     }
 
-    async extractData(commanderName) {
-        try {
-            const url = this.generateEDHRECUrl(commanderName);
-            let htmlContent;
-            
-            // Try direct fetch first (your existing logic)
-            try {
-                console.log('🌐 Attempting direct fetch...');
-                const response = await fetch(url);
-                if (!response.ok) throw new Error('Direct fetch failed');
-                htmlContent = await response.text();
-                console.log('✅ Direct fetch successful');
-                
-            } catch (directError) {
-                console.log('❌ Direct fetch failed, trying proxies...');
-                
-                // Enhanced proxy rotation with fallbacks
-                let proxySuccess = false;
-                const allProxies = [this.primaryProxy, ...this.fallbackProxies];
-                
-                for (let i = 0; i < allProxies.length; i++) {
-                    const proxy = allProxies[i];
-                    try {
-                        console.log(`🔄 Proxy attempt ${i + 1}/${allProxies.length}: ${proxy || 'DIRECT'}`);
-                        
-                        const proxyUrl = proxy + url;
-                        const proxyResponse = await fetch(proxyUrl);
-                        if (!proxyResponse.ok) throw new Error(`HTTP ${proxyResponse.status}`);
-                        
-                        htmlContent = await proxyResponse.text();
-                        console.log(`✅ Proxy successful: ${proxy || 'DIRECT'}`);
-                        proxySuccess = true;
-                        break;
-                        
-                    } catch (proxyError) {
-                        console.log(`❌ Proxy failed: ${proxyError.message}`);
-                        if (i < allProxies.length - 1) {
-                            await new Promise(resolve => setTimeout(resolve, 300));
-                        }
-                    }
-                }
-                
-                if (!proxySuccess) {
-                    throw new Error('All proxy attempts failed');
-                }
-            }
-
-            return this.parseHTML(htmlContent);
-            
-        } catch (error) {
-            console.error('EDHREC extraction error:', error);
-            // Fallback to sample data
-            return this.getSampleData(commanderName);
-        }
-    }
+	async extractData(input) {
+		try {
+			let url;
+			
+			// Determine if input is a URL or commander name
+			if (input.startsWith('http') || input.includes('edhrec.com')) {
+				// It's already a URL - use it directly
+				url = input;
+				console.log('🌐 Using direct URL:', url);
+			} else {
+				// It's a commander name - generate EDHREC URL
+				url = this.generateEDHRECUrl(input);
+				console.log('🌐 Generated URL from commander name:', url);
+			}
+			
+			// Fetch HTML content
+			const htmlContent = await this.fetchPageContent(url);
+			
+			// Parse HTML and extract commander data from title
+			return this.parseHTML(htmlContent);
+			
+		} catch (error) {
+			console.error('EDHREC extraction error:', error);
+			// Fallback to sample data
+			return this.getSampleData(input);
+		}
+	}
+	
+	async fetchPageContent(url) {
+		// Try direct fetch first
+		try {
+			console.log('🌐 Attempting direct fetch...');
+			const response = await fetch(url);
+			if (!response.ok) throw new Error(`HTTP ${response.status}: Direct fetch failed`);
+			const htmlContent = await response.text();
+			console.log('✅ Direct fetch successful');
+			return htmlContent;
+			
+		} catch (directError) {
+			console.log('❌ Direct fetch failed, trying proxies...');
+			
+			// Try each proxy
+			for (let i = 0; i < this.proxies.length; i++) {
+				const proxy = this.proxies[i];
+				try {
+					console.log(`🔄 Proxy attempt ${i + 1}/${this.proxies.length}: ${proxy || 'DIRECT'}`);
+					
+					const proxyUrl = proxy ? proxy + encodeURIComponent(url) : url;
+					const proxyResponse = await fetch(proxyUrl);
+					
+					if (!proxyResponse.ok) {
+						throw new Error(`HTTP ${proxyResponse.status}`);
+					}
+					
+					const htmlContent = await proxyResponse.text();
+					console.log(`✅ Proxy successful: ${proxy || 'DIRECT'}`);
+					return htmlContent;
+					
+				} catch (proxyError) {
+					console.log(`❌ Proxy failed: ${proxyError.message}`);
+					if (i < this.proxies.length - 1) {
+						await new Promise(resolve => setTimeout(resolve, 300));
+					}
+				}
+			}
+			
+			throw new Error('All proxy attempts failed');
+		}
+	}
 
 	generateEDHRECUrl(commanderName) {
 		// Handle double-faced cards - use only the first name
@@ -82,35 +96,62 @@ class EDHRECExtractor {
 		return `https://edhrec.com/commanders/${urlSafeName}`;
 	}
 
-    parseHTML(htmlContent) {
-        const sections = {};
-        
-        // Create a temporary DOM parser
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(htmlContent, 'text/html');
-        
-        // Find all card containers
-        const cardContainers = doc.querySelectorAll('.Card_container__Ng56K');
-        
-        cardContainers.forEach(container => {
-            // Extract card name
-            const nameElement = container.querySelector('.Card_name__Mpa7S');
-            if (!nameElement) return;
-            
-            const cardName = nameElement.textContent.trim();
-            if (!cardName || cardName.length < 2) return;
-            
-            // Extract inclusion percentage
-            let inclusion = '';
-            const cardLabelContainer = container.querySelector('.CardLabel_container__3M9Zu');
-            
+	parseHTML(htmlContent) {
+		// Create a temporary DOM parser
+		const parser = new DOMParser();
+		const doc = parser.parseFromString(htmlContent, 'text/html');
+		
+		// Extract page title and clean it
+		const pageTitle = doc.title || '';
+		const cleanTitle = this.cleanEDHRECTitle(pageTitle);
+		
+		// Extract commander data from title
+		let commanderData = null;
+		if (cleanTitle.includes(' // ')) {
+			// Partner commanders
+			const commanderNames = cleanTitle.split(' // ').map(name => 
+				this.cleanCommanderName(name)
+			);
+			commanderData = {
+				isPartner: true,
+				commanders: commanderNames,
+				displayName: cleanTitle
+			};
+			console.log(`✅ Detected partner commanders: ${commanderNames.join(' // ')}`);
+		} else {
+			// Single commander
+			commanderData = {
+				isPartner: false,
+				commander: this.cleanCommanderName(cleanTitle),
+				displayName: cleanTitle
+			};
+			console.log(`✅ Detected single commander: ${commanderData.commander}`);
+		}
+		
+		// Continue with existing card extraction...
+		const sections = {};
+		
+		// Find all card containers
+		const cardContainers = doc.querySelectorAll('.Card_container__Ng56K');
+		
+		cardContainers.forEach(container => {
+			// Extract card name
+			const nameElement = container.querySelector('.Card_name__Mpa7S');
+			if (!nameElement) return;
+			
+			const cardName = nameElement.textContent.trim();
+			if (!cardName || cardName.length < 2) return;
+			
+			// Extract inclusion percentage
+			let inclusion = '';
+			const cardLabelContainer = container.querySelector('.CardLabel_container__3M9Zu');
+			
 			if (cardLabelContainer) {
 				const inclusionLine = cardLabelContainer.querySelector('.CardLabel_line__iQ3O3');
 				if (inclusionLine) {
 					const inclusionStat = inclusionLine.querySelector('.CardLabel_stat__galuW');
 					const inclusionLabel = inclusionLine.querySelector('.CardLabel_label__iAM7T');
 					
-					// UPDATED: Handle BOTH patterns - "inclusion" AND "decks"
 					if (inclusionStat && inclusionLabel) {
 						const labelText = inclusionLabel.textContent.toLowerCase();
 						if (labelText.includes('inclusion') || labelText.includes('deck')) {
@@ -119,49 +160,43 @@ class EDHRECExtractor {
 					}
 				}
 			}
-            
-            // Find section
-            let sectionName = "Unknown";
-            const cardlist = container.closest('.Grid_cardlist__AXXsz');
-            if (cardlist) {
-                const header = cardlist.querySelector('.Grid_header__iAPM8');
-                if (header) {
-                    sectionName = header.textContent.trim();
-                } else {
-                    const id = cardlist.id;
-                    if (id) {
-                        sectionName = id.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
-                    }
-                }
-            }
-            
-            // Only add if we found valid inclusion data
-            if (inclusion && !inclusion.includes('$') && inclusion.includes('%')) {
-                if (!sections[sectionName]) {
-                    sections[sectionName] = [];
-                }
-                
-                const isDuplicate = sections[sectionName].some(card => card.name === cardName);
-                if (!isDuplicate) {
-                    sections[sectionName].push({
-                        name: cardName,
-                        inclusion: inclusion
-                    });
-                }
-            }
-        });
+			
+			// Find section
+			let sectionName = "Unknown";
+			const cardlist = container.closest('.Grid_cardlist__AXXsz');
+			if (cardlist) {
+				const header = cardlist.querySelector('.Grid_header__iAPM8');
+				if (header) {
+					sectionName = header.textContent.trim();
+				} else {
+					const id = cardlist.id;
+					if (id) {
+						sectionName = id.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase());
+					}
+				}
+			}
+			
+			// Only add if we found valid inclusion data
+			if (inclusion && !inclusion.includes('$') && inclusion.includes('%')) {
+				if (!sections[sectionName]) {
+					sections[sectionName] = [];
+				}
+				
+				const isDuplicate = sections[sectionName].some(card => card.name === cardName);
+				if (!isDuplicate) {
+					sections[sectionName].push({
+						name: cardName,
+						inclusion: inclusion
+					});
+				}
+			}
+		});
 		
-		// NEW: Extract deck count from page (ADDITION ONLY)
+		// Extract deck count from page
 		const deckCount = this.extractDeckCount(htmlContent);
-
-		// Store deck count in sections for commander card use
-		if (deckCount) {
-			sections._deckCount = deckCount; // Using underscore to avoid conflict
-		}
-
-        // Sort each section by inclusion percentage
+		
+		// Sort each section
 		Object.keys(sections).forEach(section => {
-			// ONLY sort if it's an array (actual card sections)
 			if (Array.isArray(sections[section])) {
 				sections[section].sort((a, b) => {
 					const aPct = parseFloat(a.inclusion) || 0;
@@ -171,8 +206,15 @@ class EDHRECExtractor {
 			}
 		});
 		
-        return sections;
-    }
+		// Add metadata
+		sections._commanderData = commanderData;
+		if (deckCount) {
+			sections._deckCount = deckCount;
+		}
+		
+		console.log(`📊 Parsed ${Object.keys(sections).length} sections with commander data`);
+		return sections;
+	}
 	
 	// Extract deck count (ADDITION ONLY - line ~150)
 	extractDeckCount(htmlContent) {
@@ -237,6 +279,46 @@ class EDHRECExtractor {
             ]
         };
     }
+	
+	// Clean EDHREC title suffixes
+	cleanEDHRECTitle(title) {
+		if (!title) return '';
+		
+		// Remove common EDHREC suffixes
+		const suffixes = [
+			/\s*[|―-]\s*EDHREC.*$/i,      // | EDHREC, - EDHREC, ― EDHREC
+			/\s*[|―-]\s*edhrec.*$/i,      // lowercase variants
+			/\s*[|―-]\s*MTG.*$/i,         // MTG suffixes
+			/\s*[|―-]\s*Magic:.*$/i,      // Magic: The Gathering
+			/\s*[|―-]\s*Magic.*$/i        // Magic
+		];
+		
+		let cleaned = title;
+		for (const suffix of suffixes) {
+			cleaned = cleaned.replace(suffix, '');
+		}
+		
+		// Also trim any trailing punctuation or whitespace
+		cleaned = cleaned.replace(/[|\-―]\s*$/, '').trim();
+		
+		return cleaned;
+	}
+
+	// Clean individual commander name
+	cleanCommanderName(name) {
+		if (!name) return '';
+		
+		// Remove any remaining EDHREC references
+		let cleaned = name.replace(/edhrec/gi, '').trim();
+		
+		// Remove edge case suffixes that might have been missed
+		cleaned = cleaned.replace(/\s*[|―-]\s*$/, '').trim();
+		
+		// Fix common MTG name formatting
+		cleaned = cleaned.replace(/(\w+),(\w)/, '$1, $2'); // Add space after comma
+		
+		return cleaned;
+	}
 }
 
 // Create global instance
