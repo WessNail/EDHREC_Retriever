@@ -1,4 +1,4 @@
-// VERSION:1
+// VERSION:2
 // ============================================================================
 // COMMANDER STATE MANAGER - Unified handling for all commander types
 // ============================================================================
@@ -1374,3 +1374,4 @@ window.addEventListener('error', function(event) {
 window.addEventListener('unhandledrejection', function(event) {
     console.error('Unhandled promise rejection:', event.reason);
 });
+
